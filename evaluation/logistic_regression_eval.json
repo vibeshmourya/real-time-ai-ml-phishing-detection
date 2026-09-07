@@ -1,0 +1,85 @@
+{
+  "model_name": "Logistic Regression",
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "roc_auc": 1.0
+  },
+  "confusion_matrix": {
+    "true_negative": 21,
+    "false_positive": 0,
+    "false_negative": 0,
+    "true_positive": 14
+  },
+  "top_features": [
+    {
+      "feature": "has_https",
+      "importance": 1.9091
+    },
+    {
+      "feature": "hostname_length",
+      "importance": 0.8633
+    },
+    {
+      "feature": "hyphen_count",
+      "importance": 0.5934
+    },
+    {
+      "feature": "has_url_shortener",
+      "importance": 0.5857
+    },
+    {
+      "feature": "entropy",
+      "importance": 0.4981
+    },
+    {
+      "feature": "special_character_count",
+      "importance": 0.4689
+    },
+    {
+      "feature": "digit_ratio",
+      "importance": 0.4501
+    },
+    {
+      "feature": "contains_suspicious_keyword",
+      "importance": 0.4472
+    },
+    {
+      "feature": "path_length",
+      "importance": 0.3961
+    },
+    {
+      "feature": "suspicious_keyword_count",
+      "importance": 0.3874
+    }
+  ],
+  "classification_report": {
+    "0": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 21.0
+    },
+    "1": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 14.0
+    },
+    "accuracy": 1.0,
+    "macro avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 35.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 35.0
+    }
+  }
+}

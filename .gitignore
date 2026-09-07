@@ -1,0 +1,63 @@
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment and Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# IDE and Editor Files
+.idea/
+*.iml
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+.agents/
+.gemini/
+
+# Java / Maven Artifacts
+backend/target/
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Node / Frontend Artifacts
+frontend/node_modules/
+node_modules/
+frontend/dist/
+frontend/build/
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python / ML Artifacts
+ml-service/__pycache__/
+ml-service/*/__pycache__/
+ml-service/**/__pycache__/
+__pycache__/
+*.py[cod]
+*$py.class
+ml-service/venv/
+ml-service/.venv/
+.venv/
+env/
+*.pkl
+*.joblib
+!ml-service/models/*.gitkeep
+.pytest_cache/
+
+# Database Files
+database/data/
+*.sqlite3
+*.db

@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # MySQL Database Service
+  mysql-db:
+    image: mysql:8.0
+    container_name: phishshield-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: phishshield_db
+      MYSQL_USER: phishshield_user
+      MYSQL_PASSWORD: phishshield_secure_password_2026
+      MYSQL_ROOT_PASSWORD: root_secure_password_2026
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    networks:
+      - phishshield-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_secure_password_2026"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Python Machine Learning Service
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: phishshield-ml
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+    networks:
+      - phishshield-network
+
+  # Spring Boot Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: phishshield-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=mysql
+      - DB_HOST=mysql-db
+      - DB_PORT=3306
+      - DB_NAME=phishshield_db
+      - DB_USER=phishshield_user
+      - DB_PASSWORD=phishshield_secure_password_2026
+      - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      - JWT_EXPIRATION_MS=86400000
+      - ML_SERVICE_URL=http://ml-service:8000
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - phishshield-network
+
+  # React Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: phishshield-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - phishshield-network
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  phishshield-network:
+    driver: bridge

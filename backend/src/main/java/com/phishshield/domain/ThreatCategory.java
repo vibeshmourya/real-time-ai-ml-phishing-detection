@@ -1,0 +1,16 @@
+package com.phishshield.domain;
+
+public enum ThreatCategory {
+    BANKING_PHISHING,
+    CREDENTIAL_THEFT,
+    FAKE_KYC,
+    GOVERNMENT_IMPERSONATION,
+    SHOPPING_SCAM,
+    JOB_SCAM,
+    INVESTMENT_SCAM,
+    DELIVERY_SCAM,
+    SOCIAL_MEDIA_IMPERSONATION,
+    MALWARE_DISTRIBUTION,
+    BENIGN,
+    UNKNOWN
+}
