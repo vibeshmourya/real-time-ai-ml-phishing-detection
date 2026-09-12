@@ -1,308 +1,295 @@
 import React, { useState } from 'react';
 import { 
-  ShieldAlert, AlertOctagon, PhoneCall, Globe, KeyRound, CreditCard, 
-  Smartphone, FileWarning, CheckCircle2, ChevronRight, ArrowLeft, Copy, Check, X, ExternalLink
+  ShieldAlert, X, PhoneCall, Globe, CheckSquare, 
+  Square, AlertTriangle, ArrowRight, RefreshCw, Key, 
+  CreditCard, Smartphone, Download, DollarSign, HelpCircle, CheckCircle2
 } from 'lucide-react';
 import { useScan } from '../context/ScanContext';
+import { useLanguage } from '../context/LanguageContext';
 
-const COMPROMISE_SCENARIOS = [
+const SCENARIOS = [
   {
-    id: 'PASSWORD',
-    title: 'Entered Username & Password',
-    icon: KeyRound,
-    desc: 'You typed your login credentials into the fake website.',
-    urgency: 'HIGH',
+    id: 'opened_only',
+    icon: Globe,
+    title: 'I only opened the link',
+    desc: 'I visited the website but did not submit passwords, OTPs, or financial details.',
+    severity: 'LOW',
     steps: [
-      {
-        title: 'Change Password Immediately',
-        detail: 'Open a new tab, navigate directly to the OFFICIAL website (e.g. netbanking.bank.com) and change your password.',
-        action: 'Manual Navigation'
-      },
-      {
-        title: 'Revoke Active Sessions',
-        detail: 'Look for "Security Settings > Log out of all active sessions & devices" to immediately kick the attacker out.',
-        action: 'Account Settings'
-      },
-      {
-        title: 'Enable Two-Factor Authentication (2FA)',
-        detail: 'Set up Google Authenticator or Microsoft Authenticator app (avoid SMS 2FA if possible).',
-        action: 'Enable 2FA'
-      }
+      { id: 'close_tab', text: 'Close the browser tab immediately.', detail: 'Prevent further scripts or deceptive popups from loading.' },
+      { id: 'clear_cache', text: 'Clear recent browser cookies & cache.', detail: 'Remove any tracking cookies or stored session identifiers.' },
+      { id: 'run_antivirus', text: 'Run a device antivirus or malware scan.', detail: 'Ensure no silent downloads occurred in the background.' },
+      { id: 'monitor', text: 'Stay alert for follow-up phishing calls or SMS.', detail: 'Scammers may attempt secondary social engineering.' }
     ]
   },
   {
-    id: 'BANKING',
-    title: 'Entered Debit / Credit Card or Bank Details',
+    id: 'password_entered',
+    icon: Key,
+    title: 'I entered my password / login credentials',
+    desc: 'I entered my email, social media, or portal username and password.',
+    severity: 'HIGH',
+    steps: [
+      { id: 'change_pw', text: 'Change your password immediately from a trusted device.', detail: 'Navigate manually to the genuine service website, not via links in messages.' },
+      { id: 'logout_all', text: 'Select "Log out of all active sessions / devices".', detail: 'Invalidates any active sessions the attacker might have initiated.' },
+      { id: 'enable_2fa', text: 'Enable Two-Factor Authentication (2FA) using an Authenticator app.', detail: 'Adds an essential second security layer beyond passwords.' },
+      { id: 'check_recovery', text: 'Review account recovery email and phone number.', detail: 'Ensure attacker did not insert their own backup contact info.' }
+    ]
+  },
+  {
+    id: 'bank_entered',
     icon: CreditCard,
-    desc: 'You provided card numbers, CVV, expiry date, or NetBanking PIN.',
-    urgency: 'CRITICAL',
+    title: 'I entered banking or card details',
+    desc: 'I provided debit/credit card numbers, CVV, expiry date, or NetBanking ID.',
+    severity: 'CRITICAL',
     steps: [
-      {
-        title: 'Immediately Freeze / Block Your Card',
-        detail: 'Open your genuine Mobile Banking app and switch off International & Online transactions, or block the card entirely.',
-        action: 'Bank App Toggle'
-      },
-      {
-        title: 'Call Your Bank Fraud Hotline (24/7)',
-        detail: 'Call the customer care number on the back of your physical card or bank portal to report unauthorized exposure.',
-        action: 'Call Bank Hotline'
-      },
-      {
-        title: 'Report on National Cyber Crime Portal',
-        detail: 'Dial 1930 immediately (Golden Hour reporting) or file a complaint on cybercrime.gov.in.',
-        action: 'Dial 1930 / cybercrime.gov.in'
-      }
+      { id: 'call_bank', text: 'Contact your bank fraud department immediately.', detail: 'Call the official customer care number printed on the back of your physical card.' },
+      { id: 'block_card', text: 'Temporarily freeze or block your affected card & NetBanking.', detail: 'Most banking apps allow instant card toggle/freeze in security settings.' },
+      { id: 'check_tx', text: 'Inspect recent transaction history for unauthorized debits.', detail: 'Note down any suspicious transactions with exact timestamp and amount.' },
+      { id: 'call_1930', text: 'Call 1930 (National Cyber Crime Helpline).', detail: 'The Golden Hour protocol helps banks reverse fraudulent transactions.' }
     ]
   },
   {
-    id: 'OTP',
-    title: 'Shared a One-Time Password (OTP)',
+    id: 'otp_shared',
     icon: Smartphone,
-    desc: 'You provided an SMS or WhatsApp OTP to the scammer.',
-    urgency: 'CRITICAL',
+    title: 'I shared an OTP / SMS verification code',
+    desc: 'I typed or verbally shared a 6-digit OTP received on my phone.',
+    severity: 'CRITICAL',
     steps: [
-      {
-        title: 'Immediate Bank Account Freeze Request',
-        detail: 'OTPs permit instant fund transfer. Call bank fraud desk NOW to block current outgoing transfers.',
-        action: 'Urgent Bank Call'
-      },
-      {
-        title: 'Dial 1930 Cyber Fraud Helpline',
-        detail: 'Report transaction reference details immediately to trigger financial intermediary freezes.',
-        action: 'Dial 1930'
-      },
-      {
-        title: 'File an Online Police Complaint',
-        detail: 'Save screenshots of the SMS, caller ID, and transaction debits as digital evidence.',
-        action: 'Save Screenshots'
-      }
+      { id: 'freeze_netbanking', text: 'Block NetBanking and UPI access immediately.', detail: 'Attackers use OTPs to authorize instant fund transfers or UPI registrations.' },
+      { id: 'call_1930_otp', text: 'Dial 1930 Cyber Fraud Helpline without delay.', detail: 'Immediate reporting within the Golden Hour maximizes chance of recovery.' },
+      { id: 'inform_bank', text: 'Notify your bank branch of unauthorized transaction authorization.', detail: 'Request an immediate stop-payment or freeze on outgoing mandates.' }
     ]
   },
   {
-    id: 'DOWNLOAD',
-    title: 'Downloaded an Unknown File or APK',
-    icon: FileWarning,
-    desc: 'You installed an application sent via WhatsApp/SMS (e.g., electricity.apk, kyc.apk).',
-    urgency: 'CRITICAL',
+    id: 'file_downloaded',
+    icon: Download,
+    title: 'I downloaded a file or APK',
+    desc: 'I installed an app file (.apk) or remote support software.',
+    severity: 'HIGH',
     steps: [
-      {
-        title: 'Turn on Airplane Mode Immediately',
-        detail: 'Cut off Wi-Fi and Mobile Data to prevent the trojan from exfiltrating your OTPs and contacts.',
-        action: 'Airplane Mode'
-      },
-      {
-        title: 'Uninstall Malicious App in Safe Mode',
-        detail: 'Reboot phone into Safe Mode, go to Settings > Apps > Device Admin Apps, revoke permissions, and uninstall.',
-        action: 'Remove APK'
-      },
-      {
-        title: 'Change All Banking Passwords from Another Device',
-        detail: 'Do not use the infected phone to log in to bank accounts until completely scanned or factory reset.',
-        action: 'Password Reset'
-      }
+      { id: 'airplane_mode', text: 'Turn on Airplane Mode / Disconnect Wi-Fi immediately.', detail: 'Cuts off remote access and data transmission to the attacker server.' },
+      { id: 'uninstall_app', text: 'Uninstall the downloaded app from Settings -> Apps.', detail: 'Look for recent unknown apps, fake bank APKs, or remote screen sharers.' },
+      { id: 'scan_device', text: 'Run Google Play Protect or a trusted mobile antivirus.', detail: 'Scan and eliminate any remaining malicious payloads.' },
+      { id: 'change_pw_other', text: 'Change passwords from another clean device.', detail: 'Avoid entering passwords on the infected phone until verified clean.' }
+    ]
+  },
+  {
+    id: 'money_transferred',
+    icon: DollarSign,
+    title: 'I made a payment or transferred money',
+    desc: 'I transferred funds via UPI, QR code, IMPS, or payment gateway.',
+    severity: 'CRITICAL',
+    steps: [
+      { id: 'call_1930_immed', text: 'Call 1930 immediately (National Cyber Crime Helpline).', detail: 'Provide transaction ID, sender bank, receiver UPI/account number, and amount.' },
+      { id: 'report_bank_tx', text: 'File a formal fraud dispute ticket with your bank.', detail: 'Request transaction freezing with reference to your 1930 incident number.' },
+      { id: 'file_cybercrime', text: 'Submit details on cybercrime.gov.in portal.', detail: 'Official national portal for cyber fraud reporting in India.' }
+    ]
+  },
+  {
+    id: 'not_sure',
+    icon: HelpCircle,
+    title: "I'm not sure what happened",
+    desc: 'I interacted with a suspicious link or caller and feel uneasy.',
+    severity: 'MEDIUM',
+    steps: [
+      { id: 'check_accounts', text: 'Review bank and email account activities.', detail: 'Check for unexpected login locations or notification messages.' },
+      { id: 'change_key_pw', text: 'Update passwords for primary email and banking.', detail: 'A proactive precaution prevents potential lateral access.' },
+      { id: 'verify_official', text: 'Call the official organization using genuine contact numbers.', detail: 'Never call back numbers received in suspicious messages.' }
     ]
   }
 ];
 
-export default function EmergencyWizard() {
-  const { isEmergencyOpen, setIsEmergencyOpen, showToast } = useScan();
-  const [selectedScenario, setSelectedScenario] = useState('BANKING');
+export function EmergencyWizardContent({ standalone = false }) {
+  const { isEmergencyOpen, setIsEmergencyOpen, selectedEmergencyScenario } = useScan();
+  const [activeScenarioId, setActiveScenarioId] = useState(selectedEmergencyScenario || 'bank_entered');
   const [completedSteps, setCompletedSteps] = useState({});
-  const [copiedDraft, setCopiedDraft] = useState(false);
 
-  if (!isEmergencyOpen) return null;
+  const activeScenario = SCENARIOS.find(s => s.id === activeScenarioId) || SCENARIOS[0];
 
-  const currentScenario = COMPROMISE_SCENARIOS.find(s => s.id === selectedScenario) || COMPROMISE_SCENARIOS[0];
-
-  const toggleStep = (stepIdx) => {
+  const toggleStep = (stepId) => {
     setCompletedSteps(prev => ({
       ...prev,
-      [`${selectedScenario}-${stepIdx}`]: !prev[`${selectedScenario}-${stepIdx}`]
+      [stepId]: !prev[stepId]
     }));
   };
 
-  const handleCopyComplaintDraft = () => {
-    const draft = `CYBER FRAUD INCIDENT COMPLAINT DRAFT
-----------------------------------------
-Date/Time: ${new Date().toLocaleString()}
-Nature of Threat: Phishing / Financial Deception (${currentScenario.title})
-Containment Status: Emergency Response Checklist Initiated
-
-Description:
-I was directed to a counterfeit phishing portal via a deceptive link/message and inadvertently exposed sensitive details.
-Helpline Contacted: National Cyber Crime Helpline (1930)
-
-Request:
-Please initiate immediate account/card freeze and trace unauthorized transaction logs.
-
-Generated via PhishShield Incident Playbook`;
-
-    navigator.clipboard.writeText(draft);
-    setCopiedDraft(true);
-    showToast('Incident complaint draft copied', 'info');
-    setTimeout(() => setCopiedDraft(false), 2500);
-  };
+  const progress = Math.round(
+    (activeScenario.steps.filter(s => completedSteps[s.id]).length / activeScenario.steps.length) * 100
+  );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-dark-950/90 backdrop-blur-lg overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl glass-panel p-6 sm:p-8 border-2 border-rose-500/80 shadow-glow-danger bg-dark-900/95 my-8">
-        
-        {/* Header */}
-        <div className="flex items-start justify-between pb-5 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center shrink-0">
-              <ShieldAlert className="w-7 h-7 animate-bounce" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black uppercase tracking-wider bg-rose-500 text-white px-2 py-0.5 rounded">
-                  EMERGENCY INCIDENT PLAYBOOK
-                </span>
-                <span className="text-xs text-rose-300 font-mono">
-                  Golden Hour Containment
-                </span>
-              </div>
-              <h3 className="text-xl sm:text-2xl font-black text-white mt-1">
-                "I Already Clicked the Link"
-              </h3>
-            </div>
+    <div className="space-y-6">
+      
+      {/* Top Banner */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+            <ShieldAlert className="w-7 h-7" />
           </div>
-
-          <button
-            onClick={() => setIsEmergencyOpen(false)}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition-all"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black text-red-950 dark:text-red-100">
+              I Already Clicked a Suspicious Link
+            </h2>
+            <p className="text-xs sm:text-sm text-red-800 dark:text-red-300 mt-0.5">
+              Take immediate step-by-step containment actions to protect your accounts and funds.
+            </p>
+          </div>
         </div>
 
-        {/* Emergency Quick Helplines Bar */}
-        <div className="my-5 p-4 rounded-xl bg-gradient-to-r from-rose-950/80 to-dark-950 border border-rose-500/40 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-600 flex items-center justify-center text-white shrink-0 shadow-glow-danger">
-              <PhoneCall className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-rose-200">
-                National Cyber Crime Helpline (India)
-              </p>
-              <p className="text-lg font-black text-white font-mono">
-                Dial 1930 <span className="text-xs font-normal text-rose-300 font-sans">(Toll-Free 24/7)</span>
-              </p>
-            </div>
+        {/* National Helpline Hotline */}
+        <div className="flex items-center gap-3 bg-white dark:bg-dark-900 px-4 py-2.5 rounded-2xl border border-red-300 dark:border-red-800 shrink-0 shadow-xs">
+          <PhoneCall className="w-5 h-5 text-red-600 animate-pulse" />
+          <div>
+            <span className="text-[10px] font-bold uppercase text-slate-500 block">
+              National Cyber Helpline:
+            </span>
+            <span className="text-xl font-black text-red-600 dark:text-red-400 font-mono leading-none">
+              1930
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 1. QUESTION: WHAT HAPPENED? */}
+      <div>
+        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3">
+          1. What happened? Select your situation:
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+          {SCENARIOS.map((s) => {
+            const Icon = s.icon;
+            const isSelected = s.id === activeScenarioId;
+            return (
+              <button
+                key={s.id}
+                onClick={() => setActiveScenarioId(s.id)}
+                className={`p-3.5 rounded-xl text-left transition-all border ${
+                  isSelected
+                    ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-600 dark:border-blue-500 shadow-sm'
+                    : 'bg-white dark:bg-dark-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <div className={`p-1.5 rounded-lg ${
+                    isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                  }`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <span className={`text-xs font-bold ${
+                    isSelected ? 'text-blue-900 dark:text-blue-100' : 'text-slate-800 dark:text-slate-200'
+                  }`}>
+                    {s.title}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
+                  {s.desc}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2. STEP-BY-STEP CHECKLIST */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 space-y-4 shadow-card">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-blue-600" />
+              Immediate Safety Steps: {activeScenario.title}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Follow these recommended actions in order. Check items off as you complete them.
+            </p>
+          </div>
+
+          <div className="text-right">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              {progress}% Completed
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {activeScenario.steps.map((step, idx) => {
+            const isDone = !!completedSteps[step.id];
+            return (
+              <div
+                key={step.id}
+                onClick={() => toggleStep(step.id)}
+                className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3.5 ${
+                  isDone 
+                    ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800/60 text-slate-700' 
+                    : 'bg-slate-50/80 dark:bg-dark-950/80 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                }`}
+              >
+                <div className="mt-0.5 shrink-0 text-slate-400">
+                  {isDone ? (
+                    <CheckSquare className="w-5 h-5 text-emerald-600" />
+                  ) : (
+                    <Square className="w-5 h-5 text-slate-400" />
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-black flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <h4 className={`text-sm font-bold ${
+                      isDone ? 'line-through text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white'
+                    }`}>
+                      {step.text}
+                    </h4>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 pl-7">
+                    {step.detail}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* External Official Cyber Crime Resources */}
+        <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <Globe className="w-4 h-4 text-blue-600" />
+            <span>Official Reporting: <strong>National Cyber Crime Portal</strong></span>
           </div>
 
           <a
             href="https://cybercrime.gov.in"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md transition-all shrink-0"
+            className="prahar-btn-secondary py-2 text-xs flex items-center gap-1.5"
           >
-            <Globe className="w-4 h-4" />
-            <span>cybercrime.gov.in</span>
-            <ExternalLink className="w-3 h-3" />
+            <span>Visit cybercrime.gov.in</span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </a>
         </div>
 
-        {/* Step 1: Select What Was Shared */}
-        <div className="mb-6">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-            Step 1: Select What You Entered or Downloaded
-          </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {COMPROMISE_SCENARIOS.map((scenario) => {
-              const Icon = scenario.icon;
-              const isSelected = selectedScenario === scenario.id;
-              return (
-                <button
-                  key={scenario.id}
-                  onClick={() => setSelectedScenario(scenario.id)}
-                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                    isSelected
-                      ? 'bg-rose-500/20 border-rose-500 text-white shadow-glow-danger'
-                      : 'bg-dark-950/70 border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-                  }`}
-                >
-                  <Icon className={`w-5 h-5 mb-2 ${isSelected ? 'text-rose-400' : 'text-slate-400'}`} />
-                  <span className="text-xs font-bold line-clamp-1">{scenario.title}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      </div>
 
-        {/* Step 2: Tailored Immediate Action Checklist */}
-        <div className="space-y-3 mb-6">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Step 2: Execute Immediate Containment Checklist
-            </h4>
-            <span className="text-[11px] text-indigo-400 font-mono">
-              {currentScenario.steps.filter((_, idx) => completedSteps[`${selectedScenario}-${idx}`]).length} / {currentScenario.steps.length} Completed
-            </span>
-          </div>
+    </div>
+  );
+}
 
-          <div className="space-y-2.5">
-            {currentScenario.steps.map((step, idx) => {
-              const isDone = !!completedSteps[`${selectedScenario}-${idx}`];
-              return (
-                <div
-                  key={idx}
-                  onClick={() => toggleStep(idx)}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3.5 ${
-                    isDone 
-                      ? 'bg-emerald-950/30 border-emerald-500/40 text-slate-300' 
-                      : 'bg-dark-950/90 border-slate-800 hover:border-slate-700 text-white'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    className={`mt-0.5 w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-all ${
-                      isDone 
-                        ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-bold' 
-                        : 'border-slate-600 bg-slate-800'
-                    }`}
-                  >
-                    {isDone && <Check className="w-3.5 h-3.5" />}
-                  </button>
+export default function EmergencyWizard() {
+  const { isEmergencyOpen, setIsEmergencyOpen } = useScan();
 
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <h5 className={`text-xs font-bold ${isDone ? 'line-through text-emerald-300' : 'text-white'}`}>
-                        {idx + 1}. {step.title}
-                      </h5>
-                      <span className="text-[10px] font-mono uppercase bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
-                        {step.action}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      {step.detail}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+  if (!isEmergencyOpen) return null;
 
-        {/* Step 3: Copy Complaint Summary */}
-        <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <button
-            onClick={handleCopyComplaintDraft}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-all"
-          >
-            {copiedDraft ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyber-cyan" />}
-            <span>{copiedDraft ? 'Complaint Draft Copied!' : 'Copy Official Complaint Draft'}</span>
-          </button>
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-150">
+      <div className="relative w-full max-w-4xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-modal p-6 sm:p-8 my-8">
+        <button
+          onClick={() => setIsEmergencyOpen(false)}
+          className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
 
-          <button
-            onClick={() => setIsEmergencyOpen(false)}
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md transition-all"
-          >
-            Done / Close Playbook
-          </button>
-        </div>
-
+        <EmergencyWizardContent />
       </div>
     </div>
   );

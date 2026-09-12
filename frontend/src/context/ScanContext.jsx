@@ -11,33 +11,33 @@ const INITIAL_HISTORY = [
     normalizedUrl: 'secure-login-hdfcbank.account-verify.tk/login.php',
     domain: 'secure-login-hdfcbank.account-verify.tk',
     scanType: 'URL',
-    riskScore: 94,
+    riskScore: 86,
     riskLevel: 'HIGH_RISK',
     threatCategory: 'BANKING_PHISHING',
     status: 'COMPLETED',
     detection: {
-      confidenceScore: 0.96,
-      explanationSummary: 'High-risk banking phishing attempt impersonating HDFC Bank on a suspicious .tk domain.',
-      recommendedActions: 'Do not enter passwords or OTPs. Close page immediately.',
+      confidenceScore: 0.95,
+      explanationSummary: 'The web address mimics official HDFC Bank login pages on a high-risk free domain (.tk) without valid credentials encryption.',
+      recommendedActions: 'Do not enter your password, PIN, or OTP. Close the web page immediately.',
       indicators: [
         {
           indicatorType: 'DOMAIN',
-          indicatorName: 'High-Risk Free TLD (.tk)',
-          description: 'Domain uses a free high-abuse top-level domain frequently associated with phishing.',
+          indicatorName: 'High-Risk Free Domain (.tk)',
+          description: 'The domain uses a free registrar commonly associated with disposable phishing campaigns.',
           severity: 'HIGH',
-          weight: 30
+          weight: 25
         },
         {
           indicatorType: 'BRAND_IMPERSONATION',
           indicatorName: 'Brand Spoofing: HDFC Bank',
-          description: 'URL contains brand name without being hosted on official hdfcbank.com.',
+          description: 'The link references HDFC Bank but is hosted on an unauthorized website address.',
           severity: 'CRITICAL',
-          weight: 40
+          weight: 35
         }
       ]
     },
     preventionGuide: getPreventionDetails('BANKING_PHISHING'),
-    createdAt: new Date(Date.now() - 1000 * 60 * 18).toISOString()
+    createdAt: new Date(Date.now() - 1000 * 60 * 20).toISOString()
   },
   {
     scanId: 102,
@@ -47,64 +47,56 @@ const INITIAL_HISTORY = [
     scanType: 'URL',
     riskScore: 4,
     riskLevel: 'SAFE',
-    threatCategory: 'LEGITIMATE_VERIFIED',
+    threatCategory: 'BENIGN',
     status: 'COMPLETED',
     detection: {
       confidenceScore: 0.99,
-      explanationSummary: 'Verified official Google search URL with valid HTTPS certificate.',
+      explanationSummary: 'Verified official Google search URL with valid HTTPS certificate and standard domain structure.',
       recommendedActions: 'This link is verified safe.',
-      indicators: [
-        {
-          indicatorType: 'DOMAIN_REPUTATION',
-          indicatorName: 'Official Recognized Domain',
-          description: 'Matched against global authoritative domain whitelist.',
-          severity: 'INFO',
-          weight: 0
-        }
-      ]
+      indicators: []
     },
-    preventionGuide: getPreventionDetails('SAFE_URL'),
-    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString()
+    preventionGuide: getPreventionDetails('BENIGN'),
+    createdAt: new Date(Date.now() - 1000 * 60 * 55).toISOString()
   },
   {
     scanId: 103,
     url: 'URGENT: Your SBI KYC has expired. Update now at http://sbi-kyc-reactivate.xyz to avoid card freeze.',
     normalizedUrl: 'sbi-kyc-reactivate.xyz',
-    domain: 'SMS / Message Analysis',
+    domain: 'Message Analysis',
     scanType: 'MESSAGE',
     riskScore: 91,
     riskLevel: 'HIGH_RISK',
-    threatCategory: 'KYC_FRAUD',
+    threatCategory: 'FAKE_KYC',
     status: 'COMPLETED',
     detection: {
-      confidenceScore: 0.93,
-      explanationSummary: 'Coercive KYC deactivation scam attempting to harvest NetBanking credentials.',
-      recommendedActions: 'Do not click the link or provide Aadhaar/PAN/OTP.',
+      confidenceScore: 0.94,
+      explanationSummary: 'Coercive KYC deactivation scam message attempting to panic users into visiting an unverified portal.',
+      recommendedActions: 'Do not click the link or provide Aadhaar, PAN, or OTP.',
       indicators: [
         {
-          indicatorType: 'SOCIAL_ENGINEERING',
-          indicatorName: 'Fake KYC / Identity Update Trap',
+          indicatorType: 'CONTENT',
+          indicatorName: 'Fake KYC / Account Freeze Panic',
           description: 'Coercive message threatening immediate card freeze.',
           severity: 'CRITICAL',
           weight: 35
         },
         {
-          indicatorType: 'EMBEDDED_LINK',
-          indicatorName: 'High-Abuse Domain (.xyz)',
+          indicatorType: 'DOMAIN',
+          indicatorName: 'Suspicious Domain (.xyz)',
           description: 'Embedded link uses unverified disposable registrar.',
           severity: 'HIGH',
           weight: 25
         }
       ]
     },
-    preventionGuide: getPreventionDetails('KYC_FRAUD'),
-    createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString()
+    preventionGuide: getPreventionDetails('FAKE_KYC'),
+    createdAt: new Date(Date.now() - 1000 * 60 * 140).toISOString()
   }
 ];
 
 export function ScanProvider({ children }) {
   const [history, setHistory] = useState(() => {
-    const saved = localStorage.getItem('phishshield_scans');
+    const saved = localStorage.getItem('prahar_scans');
     return saved ? JSON.parse(saved) : INITIAL_HISTORY;
   });
 
@@ -114,11 +106,12 @@ export function ScanProvider({ children }) {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isAwarenessOpen, setIsAwarenessOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('BANKING_PHISHING');
+  const [selectedEmergencyScenario, setSelectedEmergencyScenario] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
   useEffect(() => {
-    localStorage.setItem('phishshield_scans', JSON.stringify(history));
+    localStorage.setItem('prahar_scans', JSON.stringify(history));
   }, [history]);
 
   const showToast = (msg, type = 'info') => {
@@ -126,7 +119,7 @@ export function ScanProvider({ children }) {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const executeScan = async (input, scanType = 'URL') => {
+  const executeScan = async (input, scanType = 'URL', extraData = {}) => {
     setIsScanning(true);
     try {
       let res;
@@ -134,6 +127,10 @@ export function ScanProvider({ children }) {
         res = await scannerApi.scanMessage(input);
       } else if (scanType === 'EMAIL') {
         res = await scannerApi.scanEmail(input);
+      } else if (scanType === 'SCREENSHOT') {
+        res = await scannerApi.scanScreenshot(extraData.file, input);
+      } else if (scanType === 'QR') {
+        res = await scannerApi.scanQr(input, extraData.file);
       } else {
         res = await scannerApi.scanUrl(input);
       }
@@ -144,25 +141,39 @@ export function ScanProvider({ children }) {
 
       // Prepend to history (unique by scanId)
       setHistory(prev => [scanResult, ...prev.filter(item => item.scanId !== scanResult.scanId)]);
+      
+      const toastType = scanResult.riskLevel === 'SAFE' 
+        ? 'safe' 
+        : scanResult.riskLevel === 'HIGH_RISK' 
+        ? 'danger' 
+        : 'warn';
+        
       showToast(
         scanResult.riskLevel === 'SAFE'
-          ? 'Scan Completed: Verified Safe 🛡️'
+          ? 'Check Completed: Verified Safe 🛡️'
           : scanResult.riskLevel === 'HIGH_RISK'
-          ? '🚨 HIGH RISK Phishing Threat Detected!'
-          : '⚠️ Suspicious Threat Indicators Detected',
-        scanResult.riskLevel === 'SAFE' ? 'safe' : scanResult.riskLevel === 'HIGH_RISK' ? 'danger' : 'warn'
+          ? '⚠️ High Risk Phishing Flagged by Prahar'
+          : '⚠️ Suspicious Characteristics Detected',
+        toastType
       );
       return scanResult;
     } catch (err) {
-      showToast(err.message || 'Scan error occurred', 'danger');
+      showToast(err.message || 'Prahar could not complete the analysis. Please try again.', 'danger');
       throw err;
     } finally {
       setIsScanning(false);
     }
   };
 
-  const openEmergencyPlaybook = (category = 'BANKING_PHISHING') => {
+  const deleteScan = (scanId) => {
+    setHistory(prev => prev.filter(item => item.scanId !== scanId));
+    scannerApi.deleteScan(scanId);
+    showToast('Scan record deleted from history.', 'info');
+  };
+
+  const openEmergencyPlaybook = (category = 'BANKING_PHISHING', scenario = null) => {
     setSelectedCategory(category);
+    setSelectedEmergencyScenario(scenario);
     setIsEmergencyOpen(true);
   };
 
@@ -173,8 +184,8 @@ export function ScanProvider({ children }) {
 
   const clearHistory = () => {
     setHistory([]);
-    localStorage.removeItem('phishshield_scans');
-    showToast('Scan history cleared', 'info');
+    localStorage.removeItem('prahar_scans');
+    showToast('Scan history cleared.', 'info');
   };
 
   return (
@@ -193,8 +204,11 @@ export function ScanProvider({ children }) {
         setIsAwarenessOpen,
         selectedCategory,
         setSelectedCategory,
+        selectedEmergencyScenario,
+        setSelectedEmergencyScenario,
         isScanning,
         executeScan,
+        deleteScan,
         openEmergencyPlaybook,
         openAwarenessGuide,
         clearHistory,

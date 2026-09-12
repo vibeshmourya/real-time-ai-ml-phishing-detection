@@ -1,0 +1,102 @@
+{
+  "appName": "Prahar",
+  "appSubtitle": "Real-Time Phishing Detection & Prevention",
+  "tagline": "Detect. Understand. Stay Safe.",
+  "nav": {
+    "home": "Home",
+    "scan": "Scan",
+    "myScans": "My Scans",
+    "learn": "Prahar Learn",
+    "emergency": "Emergency Help",
+    "report": "Report Threat",
+    "about": "About Prahar",
+    "securityCenter": "Security Center",
+    "settings": "Settings",
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout",
+    "simpleMode": "Simple Mode",
+    "darkMode": "Dark Mode",
+    "lightMode": "Light Mode"
+  },
+  "hero": {
+    "title": "Stay Safe Online with Prahar",
+    "subtitle": "Check a suspicious link, message, email, screenshot or QR code before you trust it.",
+    "prompt": "What do you want to check?"
+  },
+  "scanner": {
+    "heading": "Is this safe?",
+    "subheading": "Paste or upload suspicious content to analyze threat indicators.",
+    "tabLink": "Check a Link",
+    "tabMessage": "Check a Message",
+    "tabEmail": "Check an Email",
+    "tabScreenshot": "Check a Screenshot",
+    "tabQr": "Scan a QR Code",
+    "linkPlaceholder": "Paste a suspicious website link (e.g. https://secure-login-hdfc.tk)...",
+    "messagePlaceholder": "Paste the suspicious SMS, WhatsApp message, or Telegram text...",
+    "emailPlaceholder": "Paste the suspicious email subject and body content...",
+    "uploadScreenshot": "Upload Screenshot",
+    "uploadScreenshotDesc": "Choose an image of a suspicious message or webpage (PNG, JPG, WEBP)",
+    "uploadQr": "Upload or Scan QR Code",
+    "uploadQrDesc": "Prahar will decode the link and check if it is safe",
+    "checkButton": "Check with Prahar",
+    "checkingButton": "Checking with Prahar...",
+    "pasteButton": "Paste",
+    "privacyNote": "Your submitted content is processed for threat analysis. Avoid uploading passwords, OTPs or unnecessary personal information.",
+    "quickTest": "Quick Test Examples:"
+  },
+  "verdict": {
+    "safe": "Verified Safe",
+    "suspicious": "Caution / Suspicious",
+    "danger": "High Risk Detected",
+    "riskLevel": "Risk Level",
+    "riskScore": "Safety Risk Score",
+    "scoreNote": "Higher scores indicate more suspicious characteristics.",
+    "whyFlagged": "Why Prahar flagged it",
+    "whatToDo": "What should I do?",
+    "iAlreadyClicked": "I Already Clicked",
+    "showTechDetails": "Show technical details",
+    "hideTechDetails": "Hide technical details",
+    "listenAdvice": "Listen to this advice",
+    "copyVerdict": "Copy Verdict",
+    "reportLink": "Report Threat",
+    "feedbackPrompt": "Was this result helpful?",
+    "feedbackThanks": "Thank you for your feedback!"
+  },
+  "emergency": {
+    "title": "I Already Clicked a Suspicious Link",
+    "subtitle": "Step-by-step immediate containment actions if you shared sensitive details.",
+    "question": "What happened?",
+    "step1": "Immediate Safety Steps",
+    "helplineTitle": "Official Cyber Fraud Helpline",
+    "helplineNumber": "1930",
+    "helplineNote": "National Cyber Crime Reporting Portal"
+  },
+  "learn": {
+    "title": "Prahar Learn",
+    "subtitle": "Simple guides to help you recognize and avoid common digital scams.",
+    "videoPlaceholder": "Video lesson coming soon.",
+    "takeQuiz": "Test Your Knowledge"
+  },
+  "report": {
+    "title": "Report a Suspicious Threat",
+    "subtitle": "Help protect other users by submitting suspicious links or messages.",
+    "urlLabel": "Suspicious Website Link or Content",
+    "categoryLabel": "Threat Category",
+    "platformLabel": "Where did you receive this?",
+    "descriptionLabel": "Brief Description (Optional)",
+    "submitButton": "Submit Report",
+    "submittedMessage": "Your report has been submitted to Prahar for review and threat analysis.",
+    "officialReporting": "Official Cyber Crime Reporting (External)"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Prahar could not complete the analysis. Please try again.",
+    "close": "Close",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "copied": "Copied to clipboard",
+    "save": "Save",
+    "delete": "Delete"
+  }
+}

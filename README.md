@@ -1,167 +1,136 @@
-# Real-Time AI/ML-Based Phishing Detection and Prevention System (PhishShield)
+# Prahar — Real-Time Multi-Channel AI/ML-Based Phishing Detection and Prevention System
 
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.4-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![Java](https://img.shields.io/badge/Java-17%20%2F%2021%20%2F%2025-orange.svg)](https://www.oracle.com/java/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-teal.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18.x-blue.svg)](https://reactjs.org/)
-[![MySQL](https://img.shields.io/badge/MySQL-8.0-blue.svg)](https://www.mysql.com/)
+[![Vite](https://img.shields.io/badge/Vite-5.x-purple.svg)](https://vitejs.dev/)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-38bdf8.svg)](https://tailwindcss.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-An integrated, enterprise-grade public cybersecurity platform designed to detect phishing attacks in real-time, explain threats in non-technical terms, enforce SSRF protection, supply immediate incident-response checklists ("I already clicked"), and educate digital citizens via short multimedia safety guides.
+**Prahar** (*Detect. Understand. Stay Safe.*) is a clean, public-facing cybersecurity safety platform engineered to help digital citizens, students, employees, and senior citizens detect phishing and social-engineering threats in real time, understand why something is suspicious, and take immediate containment actions.
 
 ---
 
-## 🛡️ Core Innovation
+## 🛡️ Core Capabilities
 
-### **DETECT → ANALYZE → CLASSIFY → EXPLAIN → WARN → PREVENT → EDUCATE → REPORT → LEARN**
-
-Most existing phishing solutions are simple black-box URL classifiers. PhishShield combines:
-1. **Hybrid Threat Detection**: High-dimensional ML models + deterministic rule engine + lexical heuristics.
-2. **Explainable AI (XAI)**: Converts raw mathematical weights into plain-language bullet points for everyday users.
-3. **Multimedia Cyber Awareness**: Dynamic, threat-tailored 30–60 second video/audio prevention modules.
-4. **Multi-Input Threat Analysis**: Scan raw URLs, raw email headers/bodies, SMS/WhatsApp text, OCR screenshots, and QR codes.
-5. **SSRF Guard Shield**: Military-grade server-side protection preventing malicious intranet exploitation.
-6. **Incident Mitigation ("I Already Clicked")**: Step-by-step contextual containment workflow for victims.
+1. **Multi-Channel Threat Scanner**: Inspect suspicious URLs, SMS text, WhatsApp/Telegram messages, raw email bodies, screenshot OCR images, and decoded QR codes.
+2. **Explainable AI (XAI)**: Synthesizes machine learning probabilities and rule-based heuristics into plain-English reasons ("Why Prahar flagged it").
+3. **Structured Risk Meter**: Clear 0–100 risk score and verdict levels (Safe, Suspicious, High Risk).
+4. **"I Already Clicked" Emergency Response**: Interactive containment questionnaire guiding users through immediate password resets, bank freezes, and official helpline 1930 reporting.
+5. **Prahar Learn**: Cyber-safety education hub with warning signs, interactive quizzes, audio narration, and prevention steps across 9 key scam categories.
+6. **Community Threat Reporting**: Honest reporting workflow with reference IDs for community protection.
+7. **Multilingual & Simple Mode**: English, Hindi, and Kannada localization with an accessibility mode for seniors.
+8. **Prahar Web Protection Browser Extension**: Manifest V3 Chrome extension with real-time tab checking and in-page warning banners.
+9. **Admin Security Center**: Protected portal for report triage, audit logs, and empirical model evaluation metrics.
 
 ---
 
-## 📐 System Architecture
+## 📐 Architecture Overview
 
 ```text
-                                  +-----------------------+
-                                  |     React Web UI      |
-                                  |  (Desktop / Mobile)   |
-                                  +-----------+-----------+
-                                              |
-                                              | HTTPS / JSON
-                                              v
-+------------------------+        +-----------+-----------+        +------------------------+
-|   Browser Extension    +------->+  Spring Boot Backend  +<-------+      MySQL 8.0 DB      |
-|  (Chrome Manifest V3)  |        |  (REST API / Security)|        | (Users, Scans, Reports)|
-+------------------------+        +-----------+-----------+        +------------------------+
-                                              |
-                                              | Internal REST
-                                              v
-                                  +-----------+-----------+
-                                  |   Python ML Engine    |
-                                  |  (FastAPI / XGBoost)  |
-                                  +-----------------------+
+                        PRAHAR
+             Real-Time Phishing Protection
+                         │
+        ┌────────────────┼────────────────┐
+        ↓                ↓                ↓
+      CHECK            LEARN            HELP
+   (Scanner)       (Prahar Learn)   (Emergency)
+        │
+        ▼
+   Multi-Channel Extraction (URL / SMS / Email / Image / QR)
+        │
+        ▼
+   Spring Boot 3 API Layer  <--->  FastAPI ML Microservice
+   (SSRF Guard & Rules)            (30 Lexical Features & XGBoost)
+        │
+        ▼
+   Explainable Verdict & Actionable Guidance
 ```
 
 ---
 
-## 📂 Monorepo Project Structure
+## 📂 Repository Organization
 
 ```text
-phishing-detection-system/
-│
-├── frontend/                     # React.js web interface
+prahar/
+├── frontend/                     # React.js (Vite + TailwindCSS) public safety UI
 │   ├── src/
-│   ├── public/
-│   ├── package.json
-│   └── README.md
-│
-├── backend/                      # Spring Boot 3 REST API Server
+│   │   ├── components/           # Navbar, QuickScanner, ScanVerdictModal, etc.
+│   │   ├── pages/                # Dashboard, ScanHistory, Learn, Emergency, Admin
+│   │   ├── context/              # AuthContext, ScanContext, LanguageContext, ThemeContext
+│   │   └── locales/              # en.json, hi.json, kn.json
+├── backend/                      # Spring Boot 3.3.4 REST API Server
 │   ├── src/main/java/com/phishshield/
-│   ├── src/main/resources/
-│   ├── pom.xml
-│   ├── Dockerfile
-│   └── README.md
-│
-├── ml-service/                   # Python FastAPI ML microservice
+│   │   ├── controller/           # URLScanController, AuthController, ReportController
+│   │   ├── service/              # RuleEngineService, MLServiceClient, QRCodeService
+│   │   ├── domain/               # JPA Entities
+│   │   └── security/             # SSRFProtectionService, JWT Auth
+├── ml-service/                   # Python FastAPI Machine Learning Microservice
 │   ├── app/
-│   ├── data/
-│   ├── models/
-│   ├── training/
-│   ├── requirements.txt
-│   └── README.md
-│
-├── browser-extension/            # Chrome Extension (Manifest V3)
+│   │   ├── api/routes.py         # /predict, /ocr, /qr, /model/evaluations
+│   │   ├── ml/                   # ModelPredictor, Explainer
+│   │   └── services/             # PredictionService, OCRService
+│   ├── models/                   # XGBoost / Logistic Regression artifacts
+│   └── tests/                    # 27 Pytest automated test suites
+├── browser-extension/            # Prahar Web Protection Manifest V3 extension
 │   ├── manifest.json
-│   ├── src/
-│   └── README.md
-│
-├── database/                     # Relational schemas & seed scripts
-│   ├── schema.sql
-│   └── seed.sql
-│
-├── docs/                         # In-depth architectural & security docs
-│   ├── architecture.md
-│   ├── api.md
-│   ├── ml-methodology.md
-│   ├── security.md
-│   └── user-guide.md
-│
-├── media/                        # Multimedia awareness audio/video assets
-│   ├── videos/
-│   ├── audio/
-│   └── thumbnails/
-│
-├── .env.example
-├── docker-compose.yml
-└── README.md
+│   └── src/                      # popup.html, popup.js, background.js, content.js
+├── database/                     # MySQL schema.sql & seed.sql scripts
+└── evaluation/                   # Real benchmark evaluation JSON metrics
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Running the System
 
-### Prerequisites
-- **Java 17+** (Java 21 or Java 25 recommended)
-- **Maven 3.9+**
-- **Node.js 18+** & npm
-- **Python 3.10+**
-- **Docker & Docker Compose** (Optional, for containerized deployment)
+### 1. Frontend (React + Vite)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+- Available at: `http://localhost:5173`
 
-### 1. Running Backend (Spring Boot)
-
-#### Option A: Quick Dev Mode (In-Memory H2 Database)
+### 2. Backend (Spring Boot)
 ```bash
 cd backend
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 - API Server: `http://localhost:8080`
-- Swagger UI Documentation: `http://localhost:8080/swagger-ui/index.html`
-- OpenAPI JSON Spec: `http://localhost:8080/v3/api-docs`
+- Swagger UI Docs: `http://localhost:8080/swagger-ui/index.html`
 
-#### Option B: MySQL Production Mode
-1. Ensure MySQL is running on `localhost:3306` with credentials configured in `.env`.
-2. Initialize database:
+### 3. ML Service (FastAPI)
 ```bash
-mysql -u root -p < database/schema.sql
-mysql -u root -p < database/seed.sql
+cd ml-service
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-3. Run backend:
-```bash
-cd backend
-mvn spring-boot:run -Dspring-boot.run.profiles=mysql
-```
+- ML Endpoint: `http://localhost:8000`
 
-#### Option C: Docker Compose (Full Stack)
-```bash
-docker-compose up --build
-```
+### 4. Browser Extension
+1. Open `chrome://extensions` in Google Chrome.
+2. Enable **Developer mode**.
+3. Click **Load unpacked** and select the `browser-extension` folder.
 
 ---
 
-## 🔒 Default Credentials & Roles
+## 🔒 Test Accounts & Personas
 
-| Role | Username | Password | Purpose |
+| Persona | Username / Email | Password | Access Level |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `admin` | `Admin@123456` | Full administrative oversight, threat intelligence & metrics |
-| **Security Analyst** | `analyst` | `Analyst@123456` | Threat report triage, indicator tuning, model audits |
-| **Regular User** | `demo_user` | `User@123456` | Personal scan history, incident reporting & safety guide |
+| **System Admin** | `admin` | `Admin@123456` | Full Security Center, triage queue & model evaluations |
+| **Security Analyst** | `analyst` | `Analyst@123456` | Threat report triage & evaluation metrics |
+| **Citizen User** | `demo_user` | `User@123456` | Personal scan history, education & reporting |
 
 ---
 
-## 📚 Documentation Links
-- [System Architecture](docs/architecture.md)
-- [REST API Specifications](docs/api.md)
-- [ML Methodology & Feature Engineering](docs/ml-methodology.md)
-- [Security & SSRF Mitigation Guide](docs/security.md)
-- [User & Incident Response Guide](docs/user-guide.md)
+## 🧪 Testing Verification
+
+- **Frontend**: `cd frontend && npm run build`
+- **Backend**: `cd backend && mvn test`
+- **ML Service**: `cd ml-service && python -m pytest`
 
 ---
 
 ## 📄 License
-This project is licensed under the MIT License.
+Licensed under the MIT License.

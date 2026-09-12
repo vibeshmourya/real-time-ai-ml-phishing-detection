@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "PhishShield Real-Time Web Defender",
+  "name": "Prahar Web Protection",
   "version": "1.0.0",
-  "description": "Real-time AI and heuristic phishing detection and immediate threat warning for your browser.",
+  "description": "Real-time AI and heuristic phishing detection and immediate threat warnings for your browser.",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "http://*/*",
@@ -13,6 +14,7 @@
   ],
   "action": {
     "default_popup": "src/popup.html",
+    "default_title": "Prahar Web Protection",
     "default_icon": {
       "16": "src/icons/icon16.png",
       "48": "src/icons/icon48.png",

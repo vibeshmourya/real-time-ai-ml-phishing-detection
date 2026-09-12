@@ -1,66 +1,63 @@
-import React, { useState, useEffect } from 'react';
-import { AlertCircle, ChevronRight, ShieldCheck, Flame, X } from 'lucide-react';
-import { dashboardApi } from '../api/dashboardApi';
+import React, { useState } from 'react';
+import { AlertCircle, ChevronRight, X, ShieldAlert } from 'lucide-react';
 import { useScan } from '../context/ScanContext';
 
+const PUBLIC_ALERTS = [
+  {
+    id: 1,
+    title: '⚠️ Active KYC Expiry SMS Scam',
+    desc: 'Scammers are sending SMS claiming bank accounts will be frozen unless KYC is verified on unauthorized links.',
+    category: 'FAKE_KYC'
+  },
+  {
+    id: 2,
+    title: '⚡ Electricity Disconnection Threats',
+    desc: 'Fraudulent notices threatening power disconnection tonight unless a phone number is called.',
+    category: 'GOVERNMENT_IMPERSONATION'
+  },
+  {
+    id: 3,
+    title: '📦 Package Address Verification Traps',
+    desc: 'Fake delivery alerts asking for Rs 5-10 card payments to update package shipping addresses.',
+    category: 'DELIVERY_SCAM'
+  }
+];
+
 export default function ThreatRadarBanner() {
-  const [alerts, setAlerts] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isDismissed, setIsDismissed] = useState(false);
-  const { openEmergencyPlaybook } = useScan();
+  const { openAwarenessGuide } = useScan();
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
-    dashboardApi.getActiveAlerts().then(data => {
-      if (data && data.length > 0) {
-        setAlerts(data);
-      }
-    });
-  }, []);
+  if (dismissed) return null;
 
-  useEffect(() => {
-    if (alerts.length <= 1) return;
-    const interval = setInterval(() => {
-      setCurrentIndex(prev => (prev + 1) % alerts.length);
-    }, 8000);
-    return () => clearInterval(interval);
-  }, [alerts]);
-
-  if (isDismissed || alerts.length === 0) return null;
-
-  const current = alerts[currentIndex];
+  const activeAlert = PUBLIC_ALERTS[currentIdx];
 
   return (
-    <div className="w-full bg-gradient-to-r from-rose-950/70 via-dark-900 to-indigo-950/70 border-y border-rose-500/20 py-2.5 px-4">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 text-xs">
+    <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/60 transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
         
-        <div className="flex items-center gap-2.5 overflow-hidden">
-          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-bold tracking-wide uppercase text-[10px] shrink-0 border border-rose-500/30 animate-pulse">
-            <Flame className="w-3 h-3 text-rose-400" />
-            Active Cyber Threat
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="px-2 py-0.5 rounded-md bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 font-bold text-[10px] uppercase shrink-0">
+            Security Alert
           </span>
-
-          <div className="flex items-center gap-2 truncate">
-            <span className="font-semibold text-white truncate">
-              {current.title}
-            </span>
-            <span className="text-slate-400 hidden md:inline truncate">
-              — {current.summary}
-            </span>
-          </div>
+          <p className="text-amber-950 dark:text-amber-200 truncate font-medium">
+            <strong>{activeAlert.title}:</strong> {activeAlert.desc}
+          </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
           <button
-            onClick={() => openEmergencyPlaybook(current.category)}
-            className="flex items-center gap-1 text-indigo-300 hover:text-white font-medium hover:underline text-[11px]"
+            onClick={() => openAwarenessGuide(activeAlert.category)}
+            className="text-amber-900 dark:text-amber-300 font-bold hover:underline flex items-center gap-1"
           >
-            <span>Safety Checklist</span>
-            <ChevronRight className="w-3 h-3" />
+            <span>Learn How to Stay Safe</span>
+            <ChevronRight className="w-3.5 h-3.5" />
           </button>
+
           <button
-            onClick={() => setIsDismissed(true)}
-            className="text-slate-500 hover:text-slate-300 p-0.5 rounded"
-            title="Dismiss advisory"
+            onClick={() => setDismissed(true)}
+            className="p-1 text-amber-700 dark:text-amber-400 hover:text-amber-900"
+            title="Dismiss"
           >
             <X className="w-3.5 h-3.5" />
           </button>

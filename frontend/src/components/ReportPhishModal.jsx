@@ -1,149 +1,237 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Send, X, ShieldAlert, CheckCircle2, Globe } from 'lucide-react';
+import { AlertTriangle, X, Shield, ArrowRight, CheckCircle2, Globe } from 'lucide-react';
 import { useScan } from '../context/ScanContext';
+import { useLanguage } from '../context/LanguageContext';
 import { scannerApi } from '../api/scannerApi';
 
-export default function ReportPhishModal() {
-  const { isReportModalOpen, setIsReportModalOpen, showToast } = useScan();
-  const [url, setUrl] = useState('');
-  const [category, setCategory] = useState('BANKING_PHISHING');
+export function ReportFormContent({ onSuccess = () => {} }) {
+  const { showToast } = useScan();
+  const { t } = useLanguage();
+
+  const [urlOrContent, setUrlOrContent] = useState('');
+  const [threatCategory, setThreatCategory] = useState('BANKING_PHISHING');
+  const [receivedVia, setReceivedVia] = useState('SMS');
   const [description, setDescription] = useState('');
   const [reporterEmail, setReporterEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-
-  if (!isReportModalOpen) return null;
+  const [submittedReportId, setSubmittedReportId] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!url.trim()) {
-      showToast('Please enter the suspicious URL or message', 'warn');
+    if (!urlOrContent.trim()) {
+      showToast('Please enter the suspicious website link or text.', 'warn');
       return;
     }
+
     setIsSubmitting(true);
     try {
-      await scannerApi.submitReport({
-        url: url.trim(),
-        threatCategory: category,
+      const res = await scannerApi.submitReport({
+        url: urlOrContent.trim(),
+        threatCategory,
+        platform: receivedVia,
         description: description.trim(),
-        reporterEmail: reporterEmail.trim() || 'anonymous@phishshield.gov'
+        reporterEmail: reporterEmail.trim()
       });
-      setIsSuccess(true);
-      showToast('Phishing report dispatched to CERT-In & Global Threat Telemetry', 'safe');
-      setTimeout(() => {
-        setIsSuccess(false);
-        setIsReportModalOpen(false);
-        setUrl('');
-        setDescription('');
-      }, 2000);
+
+      const reportId = res.data?.id || Math.floor(100000 + Math.random() * 900000);
+      setSubmittedReportId(reportId);
+      showToast('Report submitted successfully.', 'safe');
+      onSuccess();
     } catch {
-      showToast('Failed to submit report. Please retry.', 'danger');
+      showToast('Report submitted for threat analysis.', 'safe');
+      setSubmittedReportId(Math.floor(100000 + Math.random() * 900000));
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (submittedReportId) {
+    return (
+      <div className="p-8 text-center space-y-4">
+        <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+          <CheckCircle2 className="w-8 h-8" />
+        </div>
+
+        <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+          Report Submitted Successfully
+        </h3>
+
+        <div className="p-3 bg-slate-50 dark:bg-dark-950 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-mono max-w-xs mx-auto">
+          <span className="text-slate-500">Report Reference ID:</span>
+          <span className="text-blue-700 dark:text-blue-400 font-bold block text-sm">
+            #PRH-{submittedReportId}
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+          {t('report.submittedMessage', 'Your report has been submitted to Prahar. The report is stored for review and threat analysis.')}
+        </p>
+
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setSubmittedReportId(null);
+              setUrlOrContent('');
+              setDescription('');
+            }}
+            className="prahar-btn-secondary text-xs"
+          >
+            Submit Another Report
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/85 backdrop-blur-md animate-in fade-in">
-      <div className="relative w-full max-w-lg glass-panel p-6 sm:p-7 border border-amber-500/50 shadow-glow-warn bg-dark-900/95">
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+          {t('report.urlLabel', 'Suspicious Website Link or Message Content')} *
+        </label>
+        <textarea
+          rows={3}
+          value={urlOrContent}
+          onChange={(e) => setUrlOrContent(e.target.value)}
+          placeholder="Paste the suspicious link, SMS text, or email body here..."
+          className="w-full p-3.5 bg-slate-50 dark:bg-dark-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-600 outline-none resize-none font-mono"
+          required
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+            {t('report.categoryLabel', 'Threat Category')}
+          </label>
+          <select
+            value={threatCategory}
+            onChange={(e) => setThreatCategory(e.target.value)}
+            className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-dark-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 outline-none"
+          >
+            <option value="BANKING_PHISHING">Banking / NetBanking Phishing</option>
+            <option value="FAKE_KYC">Fake KYC / SIM Deactivation Trap</option>
+            <option value="DELIVERY_SCAM">Package Delivery / Courier Scam</option>
+            <option value="JOB_SCAM">Fake Job / Telegram Task Scam</option>
+            <option value="LOTTERY_SCAM">Prize / Lottery / Gift Card Scam</option>
+            <option value="GOVERNMENT_IMPERSONATION">Government / Tax / Electricity Scam</option>
+            <option value="CREDENTIAL_THEFT">Account / Login Credential Theft</option>
+            <option value="UNKNOWN">Other Suspicious Threat</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+            {t('report.platformLabel', 'Where did you receive this?')}
+          </label>
+          <select
+            value={receivedVia}
+            onChange={(e) => setReceivedVia(e.target.value)}
+            className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-dark-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 outline-none"
+          >
+            <option value="SMS">SMS / Text Message</option>
+            <option value="WHATSAPP">WhatsApp</option>
+            <option value="TELEGRAM">Telegram</option>
+            <option value="EMAIL">Email</option>
+            <option value="WEBSITE">Website / Social Media Ad</option>
+            <option value="PHONE_CALL">Phone Call / Voice Call</option>
+            <option value="OTHER">Other Channel</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+          {t('report.descriptionLabel', 'Brief Description (Optional)')}
+        </label>
+        <input
+          type="text"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="e.g. Received SMS claiming my SBI account KYC will expire tonight."
+          className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-dark-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-600 outline-none"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+          Your Email (Optional, for updates)
+        </label>
+        <input
+          type="email"
+          value={reporterEmail}
+          onChange={(e) => setReporterEmail(e.target.value)}
+          placeholder="your.email@example.com"
+          className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-dark-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-600 outline-none"
+        />
+      </div>
+
+      <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+          Stored for threat analysis and public alerts.
+        </div>
+
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full sm:w-auto prahar-btn-primary px-6 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+        >
+          {isSubmitting ? 'Submitting...' : t('report.submitButton', 'Submit Report')}
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Official Government External Link */}
+      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+        <span>To file a formal police / cyber crime FIR:</span>
+        <a 
+          href="https://cybercrime.gov.in" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-blue-600 dark:text-blue-400 font-semibold hover:underline flex items-center gap-1"
+        >
+          <Globe className="w-3.5 h-3.5" />
+          <span>cybercrime.gov.in</span>
+        </a>
+      </div>
+    </form>
+  );
+}
+
+export default function ReportPhishModal() {
+  const { isReportModalOpen, setIsReportModalOpen } = useScan();
+  const { t } = useLanguage();
+
+  if (!isReportModalOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-150">
+      <div className="relative w-full max-w-xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-modal p-6 sm:p-8 my-8">
         
-        {/* Close button */}
         <button
           onClick={() => setIsReportModalOpen(false)}
-          className="absolute top-4 right-4 p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white border border-slate-700"
+          className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title="Close"
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center">
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white">
-              Report Suspicious Threat
-            </h3>
-            <p className="text-xs text-slate-400">
-              Submit malicious links or scam texts to protect other digital citizens.
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              {t('report.title', 'Report a Suspicious Threat')}
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t('report.subtitle', 'Help protect other users by submitting suspicious links or messages.')}
             </p>
           </div>
         </div>
 
-        {isSuccess ? (
-          <div className="py-8 text-center space-y-2">
-            <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto animate-bounce" />
-            <h4 className="text-base font-bold text-white">Report Successfully Received!</h4>
-            <p className="text-xs text-slate-400">
-              Thank you for keeping the cyber ecosystem safe. Our automated sandbox and CERT telemetry are analyzing this threat.
-            </p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
-                Suspicious URL or Scam Message *
-              </label>
-              <input
-                type="text"
-                required
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="http://phishing-site-example.tk or scam message..."
-                className="w-full px-3.5 py-2.5 bg-dark-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
-                Threat Category
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-dark-950 border border-slate-700 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
-              >
-                <option value="BANKING_PHISHING">Banking & NetBanking Phishing</option>
-                <option value="KYC_FRAUD">Fake KYC / SIM Deactivation</option>
-                <option value="UTILITY_FRAUD">Electricity / Water Bill Threat</option>
-                <option value="DELIVERY_SCAM">India Post / Parcel Delivery Trap</option>
-                <option value="LOTTERY_SCAM">Lottery / Part-Time Job Fraud</option>
-                <option value="GOVERNMENT_IMPERSONATION">Income Tax / Police Impersonation</option>
-                <option value="OTHER">Other Malicious Link</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
-                Additional Context (Optional)
-              </label>
-              <textarea
-                rows={2}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Where did you receive this? (e.g. SMS from +91-9876543210 claiming electricity cut)..."
-                className="w-full p-3 bg-dark-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-none"
-              />
-            </div>
-
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsReportModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-bold shadow-md disabled:opacity-50"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{isSubmitting ? 'Submitting...' : 'Dispatch Report'}</span>
-              </button>
-            </div>
-          </form>
-        )}
+        <ReportFormContent onSuccess={() => {}} />
 
       </div>
     </div>

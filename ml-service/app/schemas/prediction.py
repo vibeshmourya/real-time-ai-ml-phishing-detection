@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 from pydantic import BaseModel, Field, field_validator
 import re
 
@@ -45,6 +45,18 @@ class PredictionResponse(BaseModel):
     explanation: list[str]
     model: ModelMetaResponse
     execution_time_ms: Optional[float] = None
+
+class OCRResponse(BaseModel):
+    success: bool = True
+    extracted_text: str
+    extracted_urls: List[str]
+    detected_language_signals: List[str]
+
+class QRResponse(BaseModel):
+    success: bool = True
+    qr_detected: bool
+    decoded_url: Optional[str] = None
+    message: str
 
 class HealthResponse(BaseModel):
     status: str

@@ -19,6 +19,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -37,19 +38,25 @@ public class URLScanService {
     private final URLScanRepository urlScanRepository;
     private final UserRepository userRepository;
     private final AuditLogService auditLogService;
+    private final QRCodeService qrCodeService;
+    private final MLServiceClient mlServiceClient;
 
     public URLScanService(SSRFProtectionService ssrfProtectionService,
                           RuleEngineService ruleEngineService,
                           PreventionContentService preventionContentService,
                           URLScanRepository urlScanRepository,
                           UserRepository userRepository,
-                          AuditLogService auditLogService) {
+                          AuditLogService auditLogService,
+                          QRCodeService qrCodeService,
+                          MLServiceClient mlServiceClient) {
         this.ssrfProtectionService = ssrfProtectionService;
         this.ruleEngineService = ruleEngineService;
         this.preventionContentService = preventionContentService;
         this.urlScanRepository = urlScanRepository;
         this.userRepository = userRepository;
         this.auditLogService = auditLogService;
+        this.qrCodeService = qrCodeService;
+        this.mlServiceClient = mlServiceClient;
     }
 
     @Transactional
@@ -124,6 +131,62 @@ public class URLScanService {
         return response;
     }
 
+    @Transactional
+    public URLScanResponse scanScreenshot(MultipartFile file, String textHint, HttpServletRequest httpRequest) {
+        String contentText = textHint != null ? textHint.trim() : "";
+        List<String> extractedUrls = extractUrlsFromText(contentText);
+
+        String targetUrl;
+        if (!extractedUrls.isEmpty()) {
+            targetUrl = extractedUrls.get(0);
+        } else {
+            targetUrl = "http://screenshot-ocr-analysis.internal";
+        }
+
+        URLScanResponse response = processAndPersistScan(targetUrl, ScanType.SCREENSHOT, httpRequest);
+
+        if (contentText.length() > 0 && response.getDetection() != null) {
+            boolean hasUrgency = checkUrgencyLanguage(contentText);
+            if (hasUrgency) {
+                ThreatIndicatorResponse ocrIndicator = ThreatIndicatorResponse.builder()
+                        .indicatorType(IndicatorType.CONTENT)
+                        .indicatorName("Screenshot OCR Threat Language")
+                        .description("Screenshot text contains urgency cues or credential solicitation.")
+                        .severity(IndicatorSeverity.HIGH)
+                        .ruleTriggered("RULE_OCR_URGENCY")
+                        .weight(25.0)
+                        .build();
+
+                List<ThreatIndicatorResponse> indicators = new ArrayList<>(response.getDetection().getIndicators());
+                indicators.add(ocrIndicator);
+                response.getDetection().setIndicators(indicators);
+            }
+        }
+
+        return response;
+    }
+
+    @Transactional
+    public URLScanResponse scanQRCode(MultipartFile file, String decodedUrlHint, HttpServletRequest httpRequest) {
+        String decodedUrl = null;
+
+        // 1. In-process ZXing decode if image file provided
+        if (file != null && !file.isEmpty()) {
+            decodedUrl = qrCodeService.decodeQRCode(file);
+        }
+
+        // 2. Fallback to client decoded hint
+        if (decodedUrl == null || decodedUrl.isEmpty()) {
+            decodedUrl = decodedUrlHint != null ? decodedUrlHint.trim() : null;
+        }
+
+        if (decodedUrl == null || decodedUrl.isEmpty()) {
+            throw new BadRequestException("No QR code or valid destination link was detected in the submitted content.");
+        }
+
+        return processAndPersistScan(decodedUrl, ScanType.QR, httpRequest);
+    }
+
     private URLScanResponse processAndPersistScan(String rawUrl, ScanType scanType, HttpServletRequest httpRequest) {
         // 1. SSRF Protection validation
         if (!rawUrl.endsWith(".internal")) {
@@ -137,31 +200,56 @@ public class URLScanService {
         // 3. Rule Engine Heuristic Evaluation
         RuleEngineService.RuleEvaluationResult ruleResult = ruleEngineService.evaluateUrl(rawUrl, domain);
 
-        // 4. Resolve authenticated user if present
+        // 4. ML Service prediction integration (if available)
+        Map<String, Object> mlResult = null;
+        if (!rawUrl.endsWith(".internal")) {
+            mlResult = mlServiceClient.predictUrl(rawUrl);
+        }
+
+        int finalScore = ruleResult.getRiskScore();
+        RiskLevel finalRiskLevel = ruleResult.getRiskLevel();
+        ThreatCategory finalCategory = ruleResult.getThreatCategory();
+        double finalConfidence = ruleResult.getConfidenceScore();
+
+        if (mlResult != null && Boolean.TRUE.equals(mlResult.get("success"))) {
+            Object mlScoreObj = mlResult.get("risk_score");
+            if (mlScoreObj instanceof Number) {
+                finalScore = Math.max(finalScore, ((Number) mlScoreObj).intValue());
+                if (finalScore >= 70) {
+                    finalRiskLevel = RiskLevel.HIGH_RISK;
+                } else if (finalScore >= 40) {
+                    finalRiskLevel = RiskLevel.SUSPICIOUS;
+                } else {
+                    finalRiskLevel = RiskLevel.SAFE;
+                }
+            }
+        }
+
+        // 5. Resolve authenticated user if present
         User currentUser = SecurityUtils.getCurrentUserId()
                 .flatMap(userRepository::findById)
                 .orElse(null);
 
-        // 5. Build and Persist Scan Entity
+        // 6. Build and Persist Scan Entity
         URLScan scan = URLScan.builder()
                 .user(currentUser)
                 .url(rawUrl)
                 .normalizedUrl(normalizedUrl)
                 .domain(domain)
                 .scanType(scanType)
-                .riskScore(ruleResult.getRiskScore())
-                .riskLevel(ruleResult.getRiskLevel())
-                .threatCategory(ruleResult.getThreatCategory())
+                .riskScore(finalScore)
+                .riskLevel(finalRiskLevel)
+                .threatCategory(finalCategory)
                 .status("COMPLETED")
                 .clientIp(SecurityUtils.getClientIpAddress(httpRequest))
                 .userAgent(SecurityUtils.getUserAgent(httpRequest))
                 .build();
 
-        // 6. Threat Detection Entity
+        // 7. Threat Detection Entity
         ThreatDetection detection = ThreatDetection.builder()
                 .scan(scan)
-                .threatCategory(ruleResult.getThreatCategory())
-                .confidenceScore(ruleResult.getConfidenceScore())
+                .threatCategory(finalCategory)
+                .confidenceScore(finalConfidence)
                 .explanationSummary(ruleResult.getExplanationSummary())
                 .recommendedActions(ruleResult.getRecommendedActions())
                 .build();
@@ -171,27 +259,27 @@ public class URLScanService {
         }
         scan.setDetection(detection);
 
-        // 7. Baseline Model Prediction record
+        // 8. Baseline Model Prediction record
         ModelPrediction prediction = ModelPrediction.builder()
                 .scan(scan)
-                .modelName("Hybrid-Heuristic-Rule-Engine-v1.0")
+                .modelName(mlResult != null ? "Prahar-ML-XGBoost" : "Prahar-Heuristic-Rule-Engine-v1.0")
                 .modelVersion("1.0.0")
-                .phishingProbability(ruleResult.getRiskScore() / 100.0)
-                .lexicalScore(ruleResult.getRiskScore() * 0.4)
-                .domainScore(ruleResult.getRiskScore() * 0.4)
-                .ruleScore(ruleResult.getRiskScore() * 0.2)
+                .phishingProbability(finalScore / 100.0)
+                .lexicalScore(finalScore * 0.4)
+                .domainScore(finalScore * 0.4)
+                .ruleScore(finalScore * 0.2)
                 .explanationJson("{\"indicatorsCount\":" + ruleResult.getIndicators().size() + "}")
                 .build();
         scan.setPrediction(prediction);
 
         URLScan savedScan = urlScanRepository.save(scan);
 
-        // 8. Fetch Contextual Prevention Guide
+        // 9. Fetch Contextual Prevention Guide
         PreventionContentResponse preventionGuide = preventionContentService
-                .getPreventionGuide(ruleResult.getThreatCategory(), "en");
+                .getPreventionGuide(finalCategory, "en");
 
         auditLogService.logAction(currentUser, "URL_SCAN", "URL_SCAN", savedScan.getId().toString(),
-                "Scanned " + domain + " - Risk: " + ruleResult.getRiskLevel() + " (" + ruleResult.getRiskScore() + "/100)");
+                "Scanned " + domain + " (" + scanType + ") - Risk: " + finalRiskLevel + " (" + finalScore + "/100)");
 
         return mapToResponse(savedScan, preventionGuide);
     }
