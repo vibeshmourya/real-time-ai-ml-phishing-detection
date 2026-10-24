@@ -1,0 +1,185 @@
+version: '3.8'
+
+# ==============================================================================
+# PRAHAR 2.0 - PRODUCTION ORCHESTRATION MANIFEST (DOCKER COMPOSE)
+# Security Features:
+# - Zero host exposure for private ports (MySQL 3306, Spring Boot 8080, FastAPI 8000)
+# - Only Port 80 & 443 exposed via Reverse Proxy with TLS termination
+# - Three-tier network segmentation (public-edge, app-internal, db-isolated)
+# - Healthcheck dependency chaining
+# - Read-only configurations & resource limits
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Reverse Proxy & Edge TLS Gateway (Only Public-Facing Service)
+  # ----------------------------------------------------------------------------
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: prahar-proxy-prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./frontend/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - frontend_dist:/usr/share/nginx/html:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - public-edge-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  # ----------------------------------------------------------------------------
+  # 2. Spring Boot Backend API (Private Application Network Only)
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: prahar-backend-prod
+    restart: always
+    # NOTICE: No host port binding (port 8080 is internal only)
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - DB_HOST=${DB_HOST:-mysql-db}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_NAME=${DB_NAME:-phishshield_db}
+      - DB_USER=${DB_USER:-phishshield_app}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_SSL_MODE=${DB_SSL_MODE:-REQUIRED}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS:-86400000}
+      - ML_SERVICE_URL=http://ml-service:8000
+      - ML_SERVICE_TIMEOUT_MS=3000
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://prahar.security.example.com}
+      - SSRF_PROTECTION_ENABLED=true
+      - SSRF_ALLOW_PRIVATE_IPS=false
+      - AI_PROVIDER=${AI_PROVIDER:-none}
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_MODEL=${AI_MODEL:-gemini-1.5-flash}
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
+    networks:
+      - public-edge-network
+      - app-internal-network
+      - db-isolated-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+
+  # ----------------------------------------------------------------------------
+  # 3. Python FastAPI ML Microservice (Private App-Internal Network Only)
+  # ----------------------------------------------------------------------------
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: prahar-ml-prod
+    restart: always
+    # NOTICE: No host port binding (port 8000 is internal only)
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - APP_ENV=production
+    volumes:
+      - ./ml-service/models:/app/models:ro
+    networks:
+      - app-internal-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1024M
+
+  # ----------------------------------------------------------------------------
+  # 4. Managed / Hardened MySQL 8.0 (Isolated DB Network Only)
+  # (Can be omitted if connecting to an external Managed Cloud RDS/Cloud SQL)
+  # ----------------------------------------------------------------------------
+  mysql-db:
+    image: mysql:8.0
+    container_name: prahar-mysql-prod
+    restart: always
+    # NOTICE: No host port binding (port 3306 is internal to db-isolated-network)
+    command: >
+      --default-authentication-plugin=caching_sha2_password
+      --require_secure_transport=OFF
+      --binlog_format=ROW
+      --binlog_expire_logs_seconds=604800
+      --sync_binlog=1
+      --innodb_flush_log_at_trx_commit=1
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-phishshield_db}
+      MYSQL_USER: ${DB_USER:-phishshield_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - mysql_prod_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ./database/production_hardening.sql:/docker-entrypoint-initdb.d/03-hardening.sql:ro
+    networks:
+      - db-isolated-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+
+# ------------------------------------------------------------------------------
+# Volumes & Networks Configuration
+# ------------------------------------------------------------------------------
+volumes:
+  mysql_prod_data:
+    driver: local
+  frontend_dist:
+    driver: local
+
+networks:
+  # Edge network: Reverse proxy <-> Spring Boot backend
+  public-edge-network:
+    driver: bridge
+  # Internal network: Spring Boot backend <-> FastAPI ML service
+  app-internal-network:
+    driver: bridge
+    internal: true
+  # Isolated DB network: Spring Boot backend <-> MySQL Database
+  db-isolated-network:
+    driver: bridge
+    internal: true

@@ -51,23 +51,83 @@ export const scannerApi = {
   },
 
   /**
+   * Multi-vector Unified Image Analysis (QR codes, OCR text, and candidate URLs)
+   */
+  async scanUnifiedImage(file, textHint = '') {
+    const formData = new FormData();
+    if (file) {
+      formData.append('file', file);
+    }
+    if (textHint && textHint.trim()) {
+      formData.append('text', textHint.trim());
+    }
+
+    try {
+      const response = await client.post('/scans/unified-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000 // 30s timeout for deep image processing & candidate scanning
+      });
+
+      if (response.data && response.data.data) {
+        return { data: response.data.data, source: 'BACKEND_LIVE' };
+      }
+      throw new Error('Received invalid or empty response from backend.');
+    } catch (err) {
+      // Categorize errors honestly without fake success
+      let category = 'SERVER_ERROR';
+      let message = err.message || 'Analysis failed.';
+
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        category = 'TIMEOUT';
+        message = 'The analysis request timed out after 30 seconds. The server might be processing high load.';
+      } else if (!err.response) {
+        category = 'NETWORK_ERROR';
+        message = 'Cannot connect to the Prahar backend service. Verify that the server is online at ' + (client.defaults.baseURL || '/api');
+      } else if (err.response.status === 400) {
+        category = 'VALIDATION_ERROR';
+        message = err.response.data?.message || 'Invalid or malformed image submitted.';
+      } else if (err.response.status === 401 || err.response.status === 403) {
+        category = 'AUTH_ERROR';
+        message = 'Authentication required or permission denied for this analysis.';
+      } else if (err.response.status === 429) {
+        category = 'RATE_LIMITED';
+        message = 'Rate limit exceeded. Please wait a few seconds before submitting another scan.';
+      } else if (err.response.status >= 500) {
+        category = 'SERVER_ERROR';
+        message = err.response.data?.message || 'The server encountered an error processing the image.';
+      }
+
+      const structuredErr = new Error(message);
+      structuredErr.category = category;
+      structuredErr.status = err.response?.status;
+      throw structuredErr;
+    }
+  },
+
+  /**
    * Scan a Screenshot / Image file
    */
   async scanScreenshot(file, extractedText = '') {
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      if (file) {
+        formData.append('file', file);
+      }
       if (extractedText) {
         formData.append('text', extractedText);
       }
-      const response = await client.post('/scans/screenshot', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const response = await client.post('/scans/unified-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000
       });
       if (response.data && response.data.data) {
         return { data: response.data.data, source: 'BACKEND_LIVE' };
       }
     } catch (err) {
-      console.warn('Backend /scans/screenshot fallback to extracted text analysis:', err.message);
+      console.warn('Backend /scans/unified-image error:', err.message);
+      if (err.response?.status === 400) {
+        throw err;
+      }
     }
 
     if (extractedText && extractedText.trim()) {

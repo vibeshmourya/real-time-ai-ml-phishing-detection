@@ -85,6 +85,10 @@ public class UrlNormalizationUtil {
         if (colonIdx != -1) {
             domain = domain.substring(0, colonIdx);
         }
-        return domain;
+        try {
+            return java.net.IDN.toASCII(domain);
+        } catch (Exception e) {
+            return domain;
+        }
     }
 }

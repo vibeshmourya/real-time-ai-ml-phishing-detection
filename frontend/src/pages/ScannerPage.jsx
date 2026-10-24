@@ -1,54 +1,63 @@
-import React from 'react';
+import React, { useState } from 'react';
 import QuickScanner from '../components/QuickScanner';
-import { ShieldCheck, Lock, Eye, AlertCircle } from 'lucide-react';
+import ImagePhishingAnalyzer from '../components/ImagePhishingAnalyzer';
+import { Link2, Layers } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function ScannerPage() {
+  const [activeMode, setActiveMode] = useState('image'); // 'image' | 'quick'
+  const { t } = useLanguage();
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-          Security Threat Scanner
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Inspect website links, messages, emails, screenshots, or QR codes with Prahar’s explainable detection engine.
-        </p>
-      </div>
-
-      <QuickScanner />
-
-      {/* Safety Tips Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
-        <div className="p-4 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 space-y-1.5 shadow-card text-xs">
-          <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white">
-            <Lock className="w-4 h-4 text-blue-600" />
-            <span>Privacy Guarded</span>
-          </div>
-          <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
-            Content is analyzed for structural threat markers. Passwords or OTPs are never stored.
+      {/* Title & Mode Switcher */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+            {t('scanner.pageTitle', 'Security Threat Scanner')}
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            {t('scanner.pageSubtitle', 'Deep multi-channel phishing detection across links, messages, emails, visual screenshots, and QR codes.')}
           </p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 space-y-1.5 shadow-card text-xs">
-          <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white">
-            <Eye className="w-4 h-4 text-emerald-600" />
-            <span>Explainable AI</span>
-          </div>
-          <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
-            Results explain in plain language why a web address or message is suspicious.
-          </p>
-        </div>
+        {/* Mode Selector Segmented Control */}
+        <div className="flex items-center p-1.5 bg-slate-100 dark:bg-dark-900 border border-slate-200 dark:border-slate-800 rounded-2xl shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveMode('image')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeMode === 'image'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>{t('scanner.visualQrLab', 'Visual & QR Lab')}</span>
+          </button>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 space-y-1.5 shadow-card text-xs">
-          <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white">
-            <AlertCircle className="w-4 h-4 text-amber-600" />
-            <span>Multi-Channel Inspection</span>
-          </div>
-          <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
-            Covers URLs, SMS, WhatsApp text, email headers, screenshots, and decoded QR destinations.
-          </p>
+          <button
+            type="button"
+            onClick={() => setActiveMode('quick')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeMode === 'quick'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            <span>{t('scanner.quickTextLink', 'Quick Text / Link')}</span>
+          </button>
         </div>
       </div>
+
+      {/* Main View Area */}
+      {activeMode === 'image' ? (
+        <ImagePhishingAnalyzer />
+      ) : (
+        <QuickScanner />
+      )}
 
     </div>
   );

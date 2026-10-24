@@ -5,8 +5,12 @@
   "nav": {
     "home": "Home",
     "scan": "Scan",
+    "money": "My Money",
+    "safety": "Safety Centre",
+    "chat": "Ask Prahar",
+    "device": "Device Safety",
     "myScans": "My Scans",
-    "learn": "Prahar Learn",
+    "learn": "Learn",
     "emergency": "Emergency Help",
     "report": "Report Threat",
     "about": "About Prahar",
@@ -17,21 +21,45 @@
     "logout": "Logout",
     "simpleMode": "Simple Mode",
     "darkMode": "Dark Mode",
-    "lightMode": "Light Mode"
+    "lightMode": "Light Mode",
+    "analystPortal": "Analyst Portal",
+    "adminPortal": "Admin Portal"
   },
   "hero": {
-    "title": "Stay Safe Online with Prahar",
-    "subtitle": "Check a suspicious link, message, email, screenshot or QR code before you trust it.",
+    "title": "Check before you trust.",
+    "subtitle": "Check a suspicious link or message before you open it.",
+    "heading": "Check before you trust.",
+    "subheading": "Check a suspicious link or message before you open it.",
     "prompt": "What do you want to check?"
+  },
+  "dashboard": {
+    "recentChecks": "Recent Checks",
+    "viewAllScans": "View all scans ({count})",
+    "noRecentChecks": "No recent checks. Paste a link or message above to get an instant safety verdict.",
+    "clickedPromptTitle": "Clicked a suspicious link or shared OTP?",
+    "clickedPromptDesc": "Get immediate emergency containment steps and official helpline numbers.",
+    "openSafetyPlaybook": "Open Safety Playbook",
+    "safetyTipsTitle": "Digital Safety Habits",
+    "safetyTip1Title": "Verify Sender Domains",
+    "safetyTip1Desc": "Always inspect the URL bar for look-alike characters and unofficial top-level domains.",
+    "safetyTip2Title": "Never Share OTPs or PINs",
+    "safetyTip2Desc": "Legitimate banks and government officials never demand OTPs or passwords over the phone or SMS.",
+    "safetyTip3Title": "Report Cyber Fraud Fast",
+    "safetyTip3Desc": "Dial 1930 within the Golden Hour to maximize the chance of freezing fraudulent transactions."
   },
   "scanner": {
     "heading": "Is this safe?",
     "subheading": "Paste or upload suspicious content to analyze threat indicators.",
-    "tabLink": "Check a Link",
-    "tabMessage": "Check a Message",
-    "tabEmail": "Check an Email",
-    "tabScreenshot": "Check a Screenshot",
-    "tabQr": "Scan a QR Code",
+    "pageTitle": "Security Threat Scanner",
+    "pageSubtitle": "Deep multi-channel phishing detection across links, messages, emails, visual screenshots, and QR codes.",
+    "visualQrLab": "Visual & QR Lab",
+    "quickTextLink": "Quick Text / Link",
+    "selectInputType": "Select input type:",
+    "tabLink": "Link",
+    "tabMessage": "Message",
+    "tabEmail": "Email",
+    "tabScreenshot": "Screenshot",
+    "tabQr": "QR Code",
     "linkPlaceholder": "Paste a suspicious website link (e.g. https://secure-login-hdfc.tk)...",
     "messagePlaceholder": "Paste the suspicious SMS, WhatsApp message, or Telegram text...",
     "emailPlaceholder": "Paste the suspicious email subject and body content...",
@@ -42,6 +70,12 @@
     "checkButton": "Check with Prahar",
     "checkingButton": "Checking with Prahar...",
     "pasteButton": "Paste",
+    "clearButton": "Clear",
+    "sampleTests": "Sample tests:",
+    "sampleFakeBank": "🏦 Fake HDFC Bank Link",
+    "sampleUrgentKyc": "📱 Urgent KYC SMS",
+    "sampleElectricity": "⚡ Electricity Cutoff Notice",
+    "sampleGoogleSafe": "🟢 Google Official (Safe)",
     "privacyNote": "Your submitted content is processed for threat analysis. Avoid uploading passwords, OTPs or unnecessary personal information.",
     "quickTest": "Quick Test Examples:"
   },
@@ -70,13 +104,18 @@
     "step1": "Immediate Safety Steps",
     "helplineTitle": "Official Cyber Fraud Helpline",
     "helplineNumber": "1930",
-    "helplineNote": "National Cyber Crime Reporting Portal"
+    "helplineNote": "National Cyber Crime Reporting Portal",
+    "goldenHour": "Golden Hour Reporting: Call 1930 immediately"
   },
   "learn": {
     "title": "Prahar Learn",
     "subtitle": "Simple guides to help you recognize and avoid common digital scams.",
     "videoPlaceholder": "Video lesson coming soon.",
-    "takeQuiz": "Test Your Knowledge"
+    "takeQuiz": "Test Your Knowledge",
+    "warningSigns": "Warning Signs",
+    "preventionAdvice": "Key Safety Advice",
+    "listenAudio": "Listen in Audio",
+    "stopAudio": "Stop Audio"
   },
   "report": {
     "title": "Report a Suspicious Threat",
@@ -97,6 +136,8 @@
     "confirm": "Confirm",
     "copied": "Copied to clipboard",
     "save": "Save",
-    "delete": "Delete"
+    "delete": "Delete",
+    "footerNote": "Emergency cyber fraud reporting: Use official bank and government channels.",
+    "rightsReserved": "All rights reserved."
   }
 }

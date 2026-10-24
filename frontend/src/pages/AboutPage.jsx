@@ -13,11 +13,7 @@ export default function AboutPage() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
       {/* Hero Header */}
-      <div className="text-center max-w-2xl mx-auto space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-          <Shield className="w-3.5 h-3.5" />
-          <span>About the System</span>
-        </div>
+      <div className="text-center max-w-2xl mx-auto space-y-2">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           About Prahar
         </h1>
@@ -133,7 +129,7 @@ export default function AboutPage() {
   React (Vite) Frontend  <--->  Manifest V3 Chrome Extension
           │                                 │
           ▼                                 ▼
-[ Backend API Layer - Spring Boot 3.3.4 (Java 17/25) ]
+[ Backend API Layer - Spring Boot 3.3.4 (Java 17 LTS) ]
   • SSRF Protection Guard & Safe Normalization
   • JWT Authentication & Role-Based Access Control
   • Rule-Based Heuristic Scoring Engine
@@ -143,13 +139,13 @@ export default function AboutPage() {
           ▼
 [ Machine Learning Layer - Python FastAPI ]
   • 30-Dimension Lexical & Entropy Feature Extraction
-  • Ensemble Model Inference (XGBoost Classifier)
-  • LIME / SHAP Explainability & Indicator Attribution
+  • Calibrated ML Classifier & Threat Rule Aggregation
+  • Feature Attribution & Indicator Explanation
   • OCR Text Pipeline (OpenCV & Character Extraction)`}</pre>
             </div>
 
             <p className="text-slate-600 dark:text-slate-400 font-sans text-xs">
-              <strong>Academic Note:</strong> Prahar is engineered as an integration-focused system combining fast heuristic filters with tree-based machine learning classifiers to deliver deterministic and explainable outputs without black-box opacity.
+              <strong>System Design:</strong> Prahar is engineered as an integration-focused system combining fast heuristic filters with calibrated machine learning classifiers to deliver deterministic and explainable safety verdicts.
             </p>
           </div>
         )}

@@ -4,21 +4,23 @@ import com.phishshield.security.CustomAccessDeniedHandler;
 import com.phishshield.security.CustomUserDetailsService;
 import com.phishshield.security.JwtAuthenticationEntryPoint;
 import com.phishshield.security.JwtAuthenticationFilter;
+import com.phishshield.security.RateLimitingFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 @Configuration
@@ -30,6 +32,7 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint unauthorizedHandler;
     private final CustomAccessDeniedHandler accessDeniedHandler;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitingFilter rateLimitingFilter;
     private final PasswordEncoder passwordEncoder;
     private final CorsConfigurationSource corsConfigurationSource;
 
@@ -37,12 +40,14 @@ public class SecurityConfig {
                           JwtAuthenticationEntryPoint unauthorizedHandler,
                           CustomAccessDeniedHandler accessDeniedHandler,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
+                          RateLimitingFilter rateLimitingFilter,
                           PasswordEncoder passwordEncoder,
                           CorsConfigurationSource corsConfigurationSource) {
         this.userDetailsService = userDetailsService;
         this.unauthorizedHandler = unauthorizedHandler;
         this.accessDeniedHandler = accessDeniedHandler;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.rateLimitingFilter = rateLimitingFilter;
         this.passwordEncoder = passwordEncoder;
         this.corsConfigurationSource = corsConfigurationSource;
     }
@@ -70,11 +75,19 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler)
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable))
+                .headers(headers -> {
+                    headers.frameOptions(f -> f.sameOrigin());
+                    headers.contentTypeOptions(Customizer.withDefaults());
+                    headers.referrerPolicy(r -> r.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN));
+                    headers.permissionsPolicy(p -> p.policy("geolocation=(), microphone=(), camera=(), payment=()"));
+                    headers.contentSecurityPolicy(csp -> csp.policyDirectives(
+                            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; frame-ancestors 'self';"
+                    ));
+                })
                 .authorizeHttpRequests(auth -> auth
                         // Root, Health & Public Docs
                         .requestMatchers("/", "/error", "/favicon.ico").permitAll()
-                        .requestMatchers("/api/health").permitAll()
+                        .requestMatchers("/api/health", "/api/health/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
                         // Public Auth Endpoints
@@ -84,10 +97,20 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/scans/url").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/scans/email").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/scans/message").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/scans/screenshot").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/scans/qr").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/scans/unified-image").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/scans/model/evaluations").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/scans/ml-status").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/scans/{id}").permitAll()
                         .requestMatchers("/api/prevention/**").permitAll()
                         .requestMatchers("/api/alerts/active").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/reports").permitAll()
+
+                        // Prahar AI Chatbot (Public endpoints for query & health, Authenticated for history)
+                        .requestMatchers(HttpMethod.POST, "/api/chat", "/api/chat/message").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/chat/status").permitAll()
+                        .requestMatchers("/api/chat/conversations/**").authenticated()
 
                         // H2 Console in Dev
                         .requestMatchers("/h2-console/**").permitAll()
@@ -99,6 +122,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/alerts").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/prevention").hasRole("ADMIN")
                         .requestMatchers("/api/audit-logs/**").hasRole("ADMIN")
+                        .requestMatchers("/api/incidents/admin/**").hasAnyRole("ADMIN", "SECURITY_ANALYST")
 
                         // Authenticated User Endpoints
                         .requestMatchers("/api/scans/my-scans").authenticated()
@@ -106,12 +130,16 @@ public class SecurityConfig {
                         .requestMatchers("/api/reports/my-reports").authenticated()
                         .requestMatchers("/api/dashboard/user").authenticated()
                         .requestMatchers("/api/feedback").authenticated()
+                        .requestMatchers("/api/transactions/**").authenticated()
+                        .requestMatchers("/api/incidents/**").authenticated()
+                        .requestMatchers("/api/notifications/**").authenticated()
 
                         // All other endpoints require authentication
                         .anyRequest().authenticated()
                 );
 
         http.authenticationProvider(authenticationProvider());
+        http.addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

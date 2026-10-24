@@ -12,6 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 
 @Component
 public class DataInitializer implements CommandLineRunner {
@@ -23,17 +24,20 @@ public class DataInitializer implements CommandLineRunner {
     private final PreventionContentRepository preventionContentRepository;
     private final SecurityAlertRepository securityAlertRepository;
     private final PasswordEncoder passwordEncoder;
+    private final org.springframework.core.env.Environment environment;
 
     public DataInitializer(RoleRepository roleRepository,
                            UserRepository userRepository,
                            PreventionContentRepository preventionContentRepository,
                            SecurityAlertRepository securityAlertRepository,
-                           PasswordEncoder passwordEncoder) {
+                           PasswordEncoder passwordEncoder,
+                           org.springframework.core.env.Environment environment) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
         this.preventionContentRepository = preventionContentRepository;
         this.securityAlertRepository = securityAlertRepository;
         this.passwordEncoder = passwordEncoder;
+        this.environment = environment;
     }
 
     @Override
@@ -61,6 +65,14 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void seedUsers() {
+        boolean isProduction = Arrays.asList(environment.getActiveProfiles()).contains("prod");
+        boolean seedExplicitly = Boolean.parseBoolean(environment.getProperty("app.security.seed-demo-users", "false"));
+
+        if (isProduction && !seedExplicitly) {
+            log.info("Production environment active: Default demo accounts are disabled for production security.");
+            return;
+        }
+
         Role adminRole = roleRepository.findByName(RoleName.ROLE_ADMIN).orElse(null);
         Role analystRole = roleRepository.findByName(RoleName.ROLE_SECURITY_ANALYST).orElse(null);
         Role userRole = roleRepository.findByName(RoleName.ROLE_USER).orElse(null);
@@ -75,7 +87,7 @@ public class DataInitializer implements CommandLineRunner {
                     .isActive(true)
                     .build();
             userRepository.save(admin);
-            log.info("Initialized default admin user: admin / Admin@123456");
+            log.info("Initialized default admin user: admin [development mode]");
         }
 
         if (!userRepository.existsByUsername("analyst")) {
@@ -88,7 +100,7 @@ public class DataInitializer implements CommandLineRunner {
                     .isActive(true)
                     .build();
             userRepository.save(analyst);
-            log.info("Initialized default analyst user: analyst / Analyst@123456");
+            log.info("Initialized default analyst user: analyst [development mode]");
         }
 
         if (!userRepository.existsByUsername("demo_user")) {
@@ -101,7 +113,7 @@ public class DataInitializer implements CommandLineRunner {
                     .isActive(true)
                     .build();
             userRepository.save(user);
-            log.info("Initialized default demo user: demo_user / User@123456");
+            log.info("Initialized default demo user: demo_user [development mode]");
         }
     }
 

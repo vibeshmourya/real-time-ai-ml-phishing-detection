@@ -196,7 +196,7 @@ export default function AdminPortalPage() {
         <div className="p-5 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 shadow-card">
           <span className="text-xs font-bold uppercase text-slate-400 block mb-1">Total Scans Logged</span>
           <p className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
-            {stats?.totalGlobalScans?.toLocaleString() || '14,829'}
+            {stats?.totalGlobalScans != null ? stats.totalGlobalScans.toLocaleString() : '0'}
           </p>
           <span className="text-[11px] text-slate-500 mt-1 block">Live telemetry dataset</span>
         </div>
@@ -204,9 +204,13 @@ export default function AdminPortalPage() {
         <div className="p-5 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 shadow-card">
           <span className="text-xs font-bold uppercase text-red-500 block mb-1">High Risk Detections</span>
           <p className="text-2xl sm:text-3xl font-black font-mono text-red-600 dark:text-red-400">
-            {stats?.totalThreatsBlocked?.toLocaleString() || '4,120'}
+            {stats?.totalThreatsBlocked != null ? stats.totalThreatsBlocked.toLocaleString() : '0'}
           </p>
-          <span className="text-[11px] text-slate-500 mt-1 block">27.8% malicious strike rate</span>
+          <span className="text-[11px] text-slate-500 mt-1 block">
+            {stats?.totalGlobalScans && stats.totalGlobalScans > 0 
+              ? `${((stats.totalThreatsBlocked / stats.totalGlobalScans) * 100).toFixed(1)}% threat strike rate`
+              : 'Threat telemetry status'}
+          </span>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 shadow-card">
@@ -220,7 +224,7 @@ export default function AdminPortalPage() {
         <div className="p-5 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 shadow-card">
           <span className="text-xs font-bold uppercase text-blue-500 block mb-1">Average Inference Latency</span>
           <p className="text-2xl sm:text-3xl font-black font-mono text-blue-700 dark:text-blue-400">
-            {stats?.avgDetectionTimeMs || 42} <span className="text-sm font-normal text-slate-400">ms</span>
+            {stats?.avgDetectionTimeMs != null ? `${stats.avgDetectionTimeMs} ms` : '—'}
           </p>
           <span className="text-[11px] text-slate-500 mt-1 block">Spring Boot & FastAPI</span>
         </div>

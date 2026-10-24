@@ -1,0 +1,63 @@
+# ==============================================================================
+# PRAHAR 2.0 - PRODUCTION ENVIRONMENT CONFIGURATION PROFILE
+# Profile: prod
+# ==============================================================================
+
+spring:
+  datasource:
+    # Production Managed MySQL URL enforcing TLS/SSL
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/${DB_NAME:phishshield_db}?sslMode=${DB_SSL_MODE:REQUIRED}&useSSL=true&requireSSL=true&verifyServerCertificate=${DB_VERIFY_SERVER_CERT:true}&allowPublicKeyRetrieval=false&serverTimezone=UTC&characterEncoding=UTF-8
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${DB_USER:phishshield_app}
+    password: ${DB_PASSWORD}
+    hikari:
+      pool-name: PhishShieldProdPool
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      idle-timeout: 300000          # 5 minutes
+      max-lifetime: 1200000         # 20 minutes
+      connection-timeout: 20000     # 20 seconds
+      leak-detection-threshold: 30000 # 30 seconds
+      validation-timeout: 5000
+
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    # STRICT PRODUCTION RULE: Never alter schema automatically in production
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+
+# Production Logging: Structured and security-conscious
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{correlationId:-SYSTEM}] %-5level %logger{36} - %msg%n"
+  level:
+    root: WARN
+    com.phishshield: INFO
+    org.springframework.security: WARN
+    org.hibernate: ERROR
+
+# Security Overrides for Production
+app:
+  jwt:
+    # Secret MUST be passed via KMS or Secrets Manager; no default allowed in prod
+    secret: ${JWT_SECRET}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000} # 24 hours
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  security:
+    seed-demo-users: false # Strictly disabled in production
+    rate-limit:
+      enabled: true
+      auth-limit-per-min: ${RATE_LIMIT_AUTH_PER_MIN:10}
+      scan-limit-per-min: ${RATE_LIMIT_SCAN_PER_MIN:60}
+  ssrf:
+    enabled: true
+    allow-private-ips: false # Strictly block RFC-1918 in production

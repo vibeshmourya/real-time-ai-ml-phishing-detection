@@ -253,25 +253,27 @@ export default function AuthModal() {
           </form>
         )}
 
-        {/* Quick Demo Test Logins (Helpful for review and project evaluation) */}
-        <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800">
-          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-            Quick Test Accounts:
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {DEMO_PRESETS.map((preset, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => loadDemoAccount(preset)}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-blue-700 text-[11px] font-medium transition-colors text-center truncate border border-slate-200 dark:border-slate-700"
-                title={`${preset.username} (${preset.role})`}
-              >
-                {preset.roleName}
-              </button>
-            ))}
+        {/* Development Quick Test Logins (excluded in production builds) */}
+        {import.meta.env.DEV && (
+          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+              Dev Test Accounts (Development Only):
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {DEMO_PRESETS.map((preset, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => loadDemoAccount(preset)}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-blue-700 text-[11px] font-medium transition-colors text-center truncate border border-slate-200 dark:border-slate-700"
+                  title={`${preset.username} (${preset.role})`}
+                >
+                  {preset.roleName}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
     </div>

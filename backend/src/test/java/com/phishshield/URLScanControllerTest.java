@@ -13,7 +13,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import org.springframework.mock.web.MockMultipartFile;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -108,5 +111,105 @@ class URLScanControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.threatCategory").value("BANKING_PHISHING"))
                 .andExpect(jsonPath("$.data.immediateActions").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("Should reject spoofed executable upload disguised as screenshot image")
+    void testRejectSpoofedImageScreenshot() throws Exception {
+        byte[] exeBytes = new byte[]{0x4D, 0x5A, (byte) 0x90, 0x00, 0x03, 0x00, 0x00, 0x00};
+        MockMultipartFile fakeFile = new MockMultipartFile(
+                "file",
+                "malicious.png",
+                "image/png",
+                exeBytes
+        );
+
+        mockMvc.perform(multipart("/api/scans/screenshot")
+                        .file(fakeFile)
+                        .param("text", "urgent verify"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Unsupported or unrecognized file format")));
+    }
+
+    @Test
+    @DisplayName("Should reject corrupted QR code image upload")
+    void testRejectCorruptedQrUpload() throws Exception {
+        byte[] corruptedBytes = new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01, 0x02};
+        MockMultipartFile fakeFile = new MockMultipartFile(
+                "file",
+                "broken-qr.png",
+                "image/png",
+                corruptedBytes
+        );
+
+        mockMvc.perform(multipart("/api/scans/qr")
+                        .file(fakeFile))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Corrupted or malformed image data")));
+    }
+
+    @Test
+    @DisplayName("Should accept valid synthetic screenshot PNG and perform threat analysis")
+    void testAcceptValidScreenshot() throws Exception {
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(200, 100, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(img, "png", baos);
+
+        MockMultipartFile validFile = new MockMultipartFile(
+                "file",
+                "clean-screenshot.png",
+                "image/png",
+                baos.toByteArray()
+        );
+
+        mockMvc.perform(multipart("/api/scans/screenshot")
+                        .file(validFile)
+                        .param("text", "Urgent: update KYC at http://secure-hdfc-kyc.tk"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.scanType").value("SCREENSHOT"));
+    }
+
+    @Test
+    @DisplayName("Should accept valid synthetic PNG on /api/scans/unified-image and perform multi-vector analysis")
+    void testAcceptValidUnifiedImage() throws Exception {
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(250, 150, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(img, "png", baos);
+
+        MockMultipartFile validFile = new MockMultipartFile(
+                "file",
+                "unified-test.png",
+                "image/png",
+                baos.toByteArray()
+        );
+
+        mockMvc.perform(multipart("/api/scans/unified-image")
+                        .file(validFile)
+                        .param("text", "Urgent KYC notice: verify at http://secure-hdfc-kyc.tk"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value(org.hamcrest.Matchers.isOneOf("SUCCESS", "PARTIAL_SUCCESS")))
+                .andExpect(jsonPath("$.data.imageValidation.valid").value(true))
+                .andExpect(jsonPath("$.data.imageValidation.format").value("PNG"))
+                .andExpect(jsonPath("$.data.urlCandidates").isArray());
+    }
+
+    @Test
+    @DisplayName("Should reject malformed image on /api/scans/unified-image")
+    void testRejectMalformedUnifiedImage() throws Exception {
+        MockMultipartFile corruptedFile = new MockMultipartFile(
+                "file",
+                "corrupted.png",
+                "image/png",
+                new byte[]{ (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00 }
+        );
+
+        mockMvc.perform(multipart("/api/scans/unified-image")
+                        .file(corruptedFile))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
     }
 }

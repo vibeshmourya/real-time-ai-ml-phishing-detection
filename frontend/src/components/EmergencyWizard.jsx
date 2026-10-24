@@ -100,6 +100,7 @@ const SCENARIOS = [
 
 export function EmergencyWizardContent({ standalone = false }) {
   const { isEmergencyOpen, setIsEmergencyOpen, selectedEmergencyScenario } = useScan();
+  const { t } = useLanguage();
   const [activeScenarioId, setActiveScenarioId] = useState(selectedEmergencyScenario || 'bank_entered');
   const [completedSteps, setCompletedSteps] = useState({});
 
@@ -127,10 +128,10 @@ export function EmergencyWizardContent({ standalone = false }) {
           </div>
           <div>
             <h2 className="text-xl sm:text-2xl font-black text-red-950 dark:text-red-100">
-              I Already Clicked a Suspicious Link
+              {t('emergency.title', 'I Already Clicked a Suspicious Link')}
             </h2>
             <p className="text-xs sm:text-sm text-red-800 dark:text-red-300 mt-0.5">
-              Take immediate step-by-step containment actions to protect your accounts and funds.
+              {t('emergency.subtitle', 'Take immediate step-by-step containment actions to protect your accounts and funds.')}
             </p>
           </div>
         </div>
@@ -140,7 +141,7 @@ export function EmergencyWizardContent({ standalone = false }) {
           <PhoneCall className="w-5 h-5 text-red-600 animate-pulse" />
           <div>
             <span className="text-[10px] font-bold uppercase text-slate-500 block">
-              National Cyber Helpline:
+              {t('emergency.helplineTitle', 'National Cyber Helpline')}:
             </span>
             <span className="text-xl font-black text-red-600 dark:text-red-400 font-mono leading-none">
               1930
@@ -152,7 +153,7 @@ export function EmergencyWizardContent({ standalone = false }) {
       {/* 1. QUESTION: WHAT HAPPENED? */}
       <div>
         <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3">
-          1. What happened? Select your situation:
+          {t('emergency.question', '1. What happened? Select your situation:')}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
           {SCENARIOS.map((s) => {

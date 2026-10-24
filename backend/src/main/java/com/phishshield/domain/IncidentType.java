@@ -1,0 +1,16 @@
+package com.phishshield.domain;
+
+public enum IncidentType {
+    UNAUTHORIZED_DEBIT,
+    SUSPICIOUS_CREDIT,
+    UPI_FRAUD,
+    ATM_CARD_FRAUD,
+    OTP_DISCLOSURE,
+    PHISHING_CLICKED,
+    CREDENTIALS_LEAKED,
+    PHONE_THEFT,
+    SIM_SWAP,
+    MALICIOUS_APP,
+    IDENTITY_THEFT,
+    OTHER
+}

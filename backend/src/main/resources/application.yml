@@ -11,6 +11,11 @@ spring:
   sql:
     init:
       mode: never
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: ${SPRING_MULTIPART_MAX_FILE_SIZE:10MB}
+      max-request-size: ${SPRING_MULTIPART_MAX_REQUEST_SIZE:15MB}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -18,19 +23,51 @@ server:
     include-message: always
     include-binding-errors: always
 
-# Security & JWT Configuration
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{correlationId:-SYSTEM}] %-5level %logger{36} - %msg%n"
+  level:
+    root: INFO
+    com.phishshield: INFO
+
+# Security & Application Configuration
 app:
   jwt:
     secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000} # 24 hours
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8080}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8080,chrome-extension://*}
+  security:
+    seed-demo-users: ${SEED_DEMO_USERS:false}
+    rate-limit:
+      enabled: ${RATE_LIMIT_ENABLED:true}
+      auth-limit-per-min: ${RATE_LIMIT_AUTH_PER_MIN:15}
+      scan-limit-per-min: ${RATE_LIMIT_SCAN_PER_MIN:60}
+  threat-intel:
+    enabled: ${THREAT_INTEL_ENABLED:false}
+    provider: ${THREAT_INTEL_PROVIDER:google}
+    google-api-key: ${THREAT_INTEL_GOOGLE_KEY:}
+    virustotal-api-key: ${THREAT_INTEL_VT_KEY:}
+    timeout-ms: ${THREAT_INTEL_TIMEOUT_MS:3000}
+    require-consent: ${THREAT_INTEL_REQUIRE_CONSENT:true}
   ml-service:
     url: ${ML_SERVICE_URL:http://localhost:8000}
     timeout-ms: ${ML_SERVICE_TIMEOUT_MS:3000}
   ssrf:
     enabled: ${SSRF_PROTECTION_ENABLED:true}
     allow-private-ips: ${SSRF_ALLOW_PRIVATE_IPS:false}
+  ai:
+    provider: ${AI_PROVIDER:none}
+    api-key: ${AI_API_KEY:}
+    api-url: ${AI_API_URL:}
+    model: ${AI_MODEL:}
+    timeout-ms: ${AI_TIMEOUT_MS:15000}
+  upload:
+    max-file-size-bytes: ${UPLOAD_MAX_FILE_SIZE_BYTES:10485760} # 10 MB limit
+    max-width: ${UPLOAD_MAX_WIDTH:4096}
+    max-height: ${UPLOAD_MAX_HEIGHT:4096}
+    max-pixels: ${UPLOAD_MAX_PIXELS:16777216} # 16 Megapixels
+    allowed-formats: ${UPLOAD_ALLOWED_FORMATS:PNG,JPEG,JPG,WEBP,GIF,BMP}
 
 # OpenAPI & Swagger UI Configuration
 springdoc:

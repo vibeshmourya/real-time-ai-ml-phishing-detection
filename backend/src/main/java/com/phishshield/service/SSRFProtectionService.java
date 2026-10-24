@@ -47,7 +47,23 @@ public class SSRFProtectionService {
         try {
             uri = new URI(targetUrl);
         } catch (URISyntaxException e) {
-            throw new SSRFSecurityException("Invalid URL syntax: " + e.getMessage());
+            // Attempt IDN / Punycode conversion for internationalized domain names
+            try {
+                int schemeEnd = targetUrl.indexOf("://");
+                if (schemeEnd != -1) {
+                    String schemePart = targetUrl.substring(0, schemeEnd + 3);
+                    String rest = targetUrl.substring(schemeEnd + 3);
+                    int slashIndex = rest.indexOf('/');
+                    String rawHost = slashIndex != -1 ? rest.substring(0, slashIndex) : rest;
+                    String pathPart = slashIndex != -1 ? rest.substring(slashIndex) : "";
+                    String asciiHost = java.net.IDN.toASCII(rawHost);
+                    uri = new URI(schemePart + asciiHost + pathPart);
+                } else {
+                    throw new SSRFSecurityException("Invalid URL syntax: " + e.getMessage());
+                }
+            } catch (Exception ex) {
+                throw new SSRFSecurityException("Invalid URL syntax: " + e.getMessage());
+            }
         }
 
         // 1. Validate Scheme
@@ -63,6 +79,16 @@ public class SSRFProtectionService {
 
         // 3. Validate Host
         String host = uri.getHost();
+        if (host == null || host.trim().isEmpty()) {
+            String auth = uri.getAuthority();
+            if (auth != null && !auth.trim().isEmpty()) {
+                try {
+                    int colonIdx = auth.indexOf(':');
+                    String rawH = colonIdx != -1 ? auth.substring(0, colonIdx) : auth;
+                    host = java.net.IDN.toASCII(rawH);
+                } catch (Exception ignored) {}
+            }
+        }
         if (host == null || host.trim().isEmpty()) {
             throw new SSRFSecurityException("Missing or invalid hostname in URL.");
         }

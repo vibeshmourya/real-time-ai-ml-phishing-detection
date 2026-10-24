@@ -1,16 +1,16 @@
 version: '3.8'
 
 services:
-  # MySQL Database Service
+  # 1. MySQL Relational Database Service
   mysql-db:
     image: mysql:8.0
     container_name: phishshield-mysql
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: phishshield_db
-      MYSQL_USER: phishshield_user
-      MYSQL_PASSWORD: phishshield_secure_password_2026
-      MYSQL_ROOT_PASSWORD: root_secure_password_2026
+      MYSQL_DATABASE: ${DB_NAME:-phishshield_db}
+      MYSQL_USER: ${DB_USER:-phishshield_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-phishshield_secure_password_2026}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_secure_password_2026}
     ports:
       - "3306:3306"
     volumes:
@@ -20,12 +20,13 @@ services:
     networks:
       - phishshield-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_secure_password_2026"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root_secure_password_2026}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
 
-  # Python Machine Learning Service
+  # 2. Python FastAPI Machine Learning Microservice
   ml-service:
     build:
       context: ./ml-service
@@ -37,10 +38,18 @@ services:
     environment:
       - PORT=8000
       - HOST=0.0.0.0
+    volumes:
+      - ./ml-service/models:/app/models:ro
     networks:
       - phishshield-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
-  # Spring Boot Backend API Service
+  # 3. Spring Boot Backend API Service
   backend:
     build:
       context: ./backend
@@ -50,22 +59,39 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=mysql
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-mysql}
       - DB_HOST=mysql-db
       - DB_PORT=3306
-      - DB_NAME=phishshield_db
-      - DB_USER=phishshield_user
-      - DB_PASSWORD=phishshield_secure_password_2026
-      - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
-      - JWT_EXPIRATION_MS=86400000
+      - DB_NAME=${DB_NAME:-phishshield_db}
+      - DB_USER=${DB_USER:-phishshield_user}
+      - DB_PASSWORD=${DB_PASSWORD:-phishshield_secure_password_2026}
+      - JWT_SECRET=${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS:-86400000}
       - ML_SERVICE_URL=http://ml-service:8000
+      - ML_SERVICE_TIMEOUT_MS=${ML_SERVICE_TIMEOUT_MS:-3000}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:8080,chrome-extension://*}
+      - SSRF_PROTECTION_ENABLED=${SSRF_PROTECTION_ENABLED:-true}
+      - SSRF_ALLOW_PRIVATE_IPS=${SSRF_ALLOW_PRIVATE_IPS:-false}
+      - AI_PROVIDER=${AI_PROVIDER:-none}
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_API_URL=${AI_API_URL:-https://generativelanguage.googleapis.com/v1beta/openai/chat/completions}
+      - AI_MODEL=${AI_MODEL:-gemini-1.5-flash}
+      - AI_TIMEOUT_MS=${AI_TIMEOUT_MS:-15000}
     depends_on:
       mysql-db:
         condition: service_healthy
+      ml-service:
+        condition: service_healthy
     networks:
       - phishshield-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
-  # React Frontend Service
+  # 4. React Frontend Web Application (Reverse Proxy Nginx)
   frontend:
     build:
       context: ./frontend
@@ -75,9 +101,16 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - phishshield-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   mysql_data:

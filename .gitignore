@@ -2,6 +2,8 @@
 .DS_Store
 Thumbs.db
 desktop.ini
+*.dmp
+*.dump
 
 # Environment and Secrets
 .env
@@ -9,6 +11,10 @@ desktop.ini
 .env.*.local
 *.pem
 *.key
+*.p12
+*.pfx
+*.jks
+*.keystore
 
 # IDE and Editor Files
 .idea/
@@ -54,10 +60,25 @@ ml-service/.venv/
 env/
 *.pkl
 *.joblib
+!ml-service/models/best_model.joblib
 !ml-service/models/*.gitkeep
 .pytest_cache/
+coverage/
+.coverage*
+htmlcov/
+ml-service/temp_uploads/
 
 # Database Files
 database/data/
 *.sqlite3
 *.db
+
+# Archive Packages (Prevent accidental commits of submission bundles)
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+prahar_academic_submission/
+dist/
+build/

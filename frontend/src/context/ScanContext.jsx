@@ -110,6 +110,22 @@ export function ScanProvider({ children }) {
   const [isScanning, setIsScanning] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
+  // Chatbot State
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatScanContext, setChatScanContext] = useState(null);
+  const [initialChatPrompt, setInitialChatPrompt] = useState(null);
+
+  const openChatWithScan = (scan = null, prompt = null) => {
+    if (scan) {
+      setChatScanContext(scan);
+    }
+    if (prompt) {
+      setInitialChatPrompt(prompt);
+    }
+    setIsChatOpen(true);
+  };
+
+
   useEffect(() => {
     localStorage.setItem('prahar_scans', JSON.stringify(history));
   }, [history]);
@@ -128,9 +144,13 @@ export function ScanProvider({ children }) {
       } else if (scanType === 'EMAIL') {
         res = await scannerApi.scanEmail(input);
       } else if (scanType === 'SCREENSHOT') {
-        res = await scannerApi.scanScreenshot(extraData.file, input);
+        res = await scannerApi.scanUnifiedImage(extraData.file, input);
       } else if (scanType === 'QR') {
-        res = await scannerApi.scanQr(input, extraData.file);
+        if (extraData.file) {
+          res = await scannerApi.scanUnifiedImage(extraData.file, input);
+        } else {
+          res = await scannerApi.scanQr(input, null);
+        }
       } else {
         res = await scannerApi.scanUrl(input);
       }
@@ -213,7 +233,14 @@ export function ScanProvider({ children }) {
         openAwarenessGuide,
         clearHistory,
         toastMessage,
-        showToast
+        showToast,
+        isChatOpen,
+        setIsChatOpen,
+        chatScanContext,
+        setChatScanContext,
+        initialChatPrompt,
+        setInitialChatPrompt,
+        openChatWithScan
       }}
     >
       {children}

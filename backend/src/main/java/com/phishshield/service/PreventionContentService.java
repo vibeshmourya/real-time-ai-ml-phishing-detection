@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 public class PreventionContentService {
 
     private final PreventionContentRepository preventionContentRepository;
+    private final java.util.Map<String, PreventionContentResponse> cache = new java.util.concurrent.ConcurrentHashMap<>();
 
     public PreventionContentService(PreventionContentRepository preventionContentRepository) {
         this.preventionContentRepository = preventionContentRepository;
@@ -23,15 +24,17 @@ public class PreventionContentService {
 
     @Transactional(readOnly = true)
     public PreventionContentResponse getPreventionGuide(ThreatCategory category, String languageCode) {
-        String lang = (languageCode != null && !languageCode.trim().isEmpty()) ? languageCode : "en";
-        
-        PreventionContent content = preventionContentRepository
-                .findByThreatCategoryAndLanguageCode(category, lang)
-                .orElseGet(() -> preventionContentRepository.findByThreatCategory(category)
-                        .orElseGet(() -> preventionContentRepository.findByThreatCategory(ThreatCategory.BENIGN)
-                                .orElse(createFallbackContent(category))));
+        String lang = (languageCode != null && !languageCode.trim().isEmpty()) ? languageCode.trim().toLowerCase() : "en";
+        String cacheKey = (category != null ? category.name() : "BENIGN") + ":" + lang;
 
-        return mapToResponse(content);
+        return cache.computeIfAbsent(cacheKey, k -> {
+            PreventionContent content = preventionContentRepository
+                    .findByThreatCategoryAndLanguageCode(category, lang)
+                    .orElseGet(() -> preventionContentRepository.findByThreatCategory(category)
+                            .orElseGet(() -> preventionContentRepository.findByThreatCategory(ThreatCategory.BENIGN)
+                                    .orElse(createFallbackContent(category))));
+            return mapToResponse(content);
+        });
     }
 
     @Transactional(readOnly = true)
@@ -44,7 +47,7 @@ public class PreventionContentService {
     @Transactional
     public PreventionContentResponse createOrUpdatePreventionContent(CreatePreventionContentRequest request) {
         String lang = (request.getLanguageCode() != null && !request.getLanguageCode().trim().isEmpty()) 
-                ? request.getLanguageCode() : "en";
+                ? request.getLanguageCode().trim().toLowerCase() : "en";
 
         PreventionContent content = preventionContentRepository
                 .findByThreatCategoryAndLanguageCode(request.getThreatCategory(), lang)
@@ -63,7 +66,13 @@ public class PreventionContentService {
         content.setAudioUrl(request.getAudioUrl());
 
         PreventionContent saved = preventionContentRepository.save(content);
-        return mapToResponse(saved);
+        PreventionContentResponse response = mapToResponse(saved);
+        
+        // Evict/update cached item
+        String cacheKey = (request.getThreatCategory() != null ? request.getThreatCategory().name() : "BENIGN") + ":" + lang;
+        cache.put(cacheKey, response);
+
+        return response;
     }
 
     public PreventionContentResponse mapToResponse(PreventionContent content) {

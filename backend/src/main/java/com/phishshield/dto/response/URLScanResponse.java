@@ -3,6 +3,7 @@ package com.phishshield.dto.response;
 import com.phishshield.domain.RiskLevel;
 import com.phishshield.domain.ScanType;
 import com.phishshield.domain.ThreatCategory;
+import com.phishshield.threatintel.ThreatIntelReport;
 
 import java.time.LocalDateTime;
 
@@ -19,6 +20,9 @@ public class URLScanResponse {
     private String status;
     private ThreatDetectionResponse detection;
     private PreventionContentResponse preventionGuide;
+    private ModelPredictionResponse modelPrediction;
+    private ThreatIntelReport threatIntel;
+    private ScanExplainabilityDetails explainability;
     private LocalDateTime createdAt;
 
     public URLScanResponse() {}
@@ -26,7 +30,8 @@ public class URLScanResponse {
     public URLScanResponse(Long scanId, String url, String normalizedUrl, String domain,
                            ScanType scanType, Integer riskScore, RiskLevel riskLevel,
                            ThreatCategory threatCategory, String status, ThreatDetectionResponse detection,
-                           PreventionContentResponse preventionGuide, LocalDateTime createdAt) {
+                           PreventionContentResponse preventionGuide, ModelPredictionResponse modelPrediction,
+                           ThreatIntelReport threatIntel, ScanExplainabilityDetails explainability, LocalDateTime createdAt) {
         this.scanId = scanId;
         this.url = url;
         this.normalizedUrl = normalizedUrl;
@@ -38,6 +43,9 @@ public class URLScanResponse {
         this.status = status;
         this.detection = detection;
         this.preventionGuide = preventionGuide;
+        this.modelPrediction = modelPrediction;
+        this.threatIntel = threatIntel;
+        this.explainability = explainability;
         this.createdAt = createdAt;
     }
 
@@ -57,6 +65,9 @@ public class URLScanResponse {
         private String status;
         private ThreatDetectionResponse detection;
         private PreventionContentResponse preventionGuide;
+        private ModelPredictionResponse modelPrediction;
+        private ThreatIntelReport threatIntel;
+        private ScanExplainabilityDetails explainability;
         private LocalDateTime createdAt;
 
         public Builder scanId(Long scanId) { this.scanId = scanId; return this; }
@@ -70,35 +81,74 @@ public class URLScanResponse {
         public Builder status(String status) { this.status = status; return this; }
         public Builder detection(ThreatDetectionResponse detection) { this.detection = detection; return this; }
         public Builder preventionGuide(PreventionContentResponse preventionGuide) { this.preventionGuide = preventionGuide; return this; }
+        public Builder modelPrediction(ModelPredictionResponse modelPrediction) { this.modelPrediction = modelPrediction; return this; }
+        public Builder threatIntel(ThreatIntelReport threatIntel) { this.threatIntel = threatIntel; return this; }
+        public Builder explainability(ScanExplainabilityDetails explainability) { this.explainability = explainability; return this; }
         public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
 
         public URLScanResponse build() {
-            return new URLScanResponse(scanId, url, normalizedUrl, domain, scanType, riskScore, riskLevel, threatCategory, status, detection, preventionGuide, createdAt);
+            URLScanResponse response = new URLScanResponse();
+            response.scanId = this.scanId;
+            response.url = this.url;
+            response.normalizedUrl = this.normalizedUrl;
+            response.domain = this.domain;
+            response.scanType = this.scanType;
+            response.riskScore = this.riskScore;
+            response.riskLevel = this.riskLevel;
+            response.threatCategory = this.threatCategory;
+            response.status = this.status;
+            response.detection = this.detection;
+            response.preventionGuide = this.preventionGuide;
+            response.modelPrediction = this.modelPrediction;
+            response.threatIntel = this.threatIntel;
+            response.explainability = this.explainability;
+            response.createdAt = this.createdAt;
+            return response;
         }
     }
 
     public Long getScanId() { return scanId; }
     public void setScanId(Long scanId) { this.scanId = scanId; }
+
     public String getUrl() { return url; }
     public void setUrl(String url) { this.url = url; }
+
     public String getNormalizedUrl() { return normalizedUrl; }
     public void setNormalizedUrl(String normalizedUrl) { this.normalizedUrl = normalizedUrl; }
+
     public String getDomain() { return domain; }
     public void setDomain(String domain) { this.domain = domain; }
+
     public ScanType getScanType() { return scanType; }
     public void setScanType(ScanType scanType) { this.scanType = scanType; }
+
     public Integer getRiskScore() { return riskScore; }
     public void setRiskScore(Integer riskScore) { this.riskScore = riskScore; }
+
     public RiskLevel getRiskLevel() { return riskLevel; }
     public void setRiskLevel(RiskLevel riskLevel) { this.riskLevel = riskLevel; }
+
     public ThreatCategory getThreatCategory() { return threatCategory; }
     public void setThreatCategory(ThreatCategory threatCategory) { this.threatCategory = threatCategory; }
+
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
     public ThreatDetectionResponse getDetection() { return detection; }
     public void setDetection(ThreatDetectionResponse detection) { this.detection = detection; }
+
     public PreventionContentResponse getPreventionGuide() { return preventionGuide; }
     public void setPreventionGuide(PreventionContentResponse preventionGuide) { this.preventionGuide = preventionGuide; }
+
+    public ModelPredictionResponse getModelPrediction() { return modelPrediction; }
+    public void setModelPrediction(ModelPredictionResponse modelPrediction) { this.modelPrediction = modelPrediction; }
+
+    public ThreatIntelReport getThreatIntel() { return threatIntel; }
+    public void setThreatIntel(ThreatIntelReport threatIntel) { this.threatIntel = threatIntel; }
+
+    public ScanExplainabilityDetails getExplainability() { return explainability; }
+    public void setExplainability(ScanExplainabilityDetails explainability) { this.explainability = explainability; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

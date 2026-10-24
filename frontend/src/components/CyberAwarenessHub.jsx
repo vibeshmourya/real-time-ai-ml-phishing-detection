@@ -199,6 +199,7 @@ export const LEARN_MODULES = [
 
 export default function CyberAwarenessHub() {
   const { isAwarenessOpen, setIsAwarenessOpen, selectedCategory } = useScan();
+  const { t } = useLanguage();
   const [activeModuleId, setActiveModuleId] = useState(selectedCategory || 'BANKING_PHISHING');
   const [selectedQuizAnswer, setSelectedQuizAnswer] = useState(null);
   const [showQuizResult, setShowQuizResult] = useState(false);
@@ -233,16 +234,11 @@ export default function CyberAwarenessHub() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-              Cyber Safety Education
-            </span>
-          </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-1">
-            Prahar Learn
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
+            {t('learn.title', 'Prahar Learn')}
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-            Simple guides and warning signs to help you recognize and avoid common digital scams.
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            {t('learn.subtitle', 'Simple guides and warning signs to help you recognize and avoid common digital scams.')}
           </p>
         </div>
 
@@ -251,7 +247,7 @@ export default function CyberAwarenessHub() {
           className="prahar-btn-secondary py-2 text-xs flex items-center gap-1.5"
         >
           {isPlayingAudio ? <VolumeX className="w-4 h-4 text-blue-600" /> : <Volume2 className="w-4 h-4 text-blue-600" />}
-          <span>{isPlayingAudio ? 'Stop Audio' : 'Listen to this guide'}</span>
+          <span>{isPlayingAudio ? t('learn.stopAudio', 'Stop Audio') : t('learn.listenAudio', 'Listen to this guide')}</span>
         </button>
       </div>
 
@@ -311,15 +307,17 @@ export default function CyberAwarenessHub() {
             </p>
           </div>
 
-          {/* Video Placeholder (Honest claim: Video lesson coming soon) */}
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-950 border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-center">
-            <Film className="w-8 h-8 text-slate-400 mb-2" />
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-              Short Video Lesson
-            </span>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              Video lesson coming soon.
-            </p>
+          {/* Practical Real-World Example */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-950 border border-slate-200 dark:border-slate-800 space-y-1.5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Real-World Pattern
+            </h4>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-800 dark:text-slate-200">
+              <span className="text-red-600 dark:text-red-400 font-bold">Fake:</span> {activeModule.id === 'BANKING_PHISHING' ? 'http://secure-login-hdfc.tk/verify' : activeModule.id === 'FAKE_KYC' ? 'SMS: "SIM block in 24h. Call 9876543210"' : 'SMS with urgent payment link'}
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-800 dark:text-slate-200">
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold">Safe:</span> Always open official apps or type genuine domain directly
+            </div>
           </div>
         </div>
 

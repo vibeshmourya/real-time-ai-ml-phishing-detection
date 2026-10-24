@@ -1,4 +1,4 @@
-# PhishShield Spring Boot Backend
+# Prahar Spring Boot Backend
 
 Production-ready backend API service for the Real-Time AI/ML-Based Phishing Detection and Prevention System.
 
