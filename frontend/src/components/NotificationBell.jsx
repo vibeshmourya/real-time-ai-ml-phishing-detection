@@ -55,7 +55,7 @@ export default function NotificationBell({ setActiveTab }) {
     fetchPreferences();
 
     // Setup Real-time SSE Connection
-    const token = localStorage.getItem('phishshield_token');
+    const token = localStorage.getItem('prahar_token') || localStorage.getItem('phishshield_token');
     if (token) {
       connectEventSource(token);
     }

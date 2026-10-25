@@ -71,7 +71,10 @@ export const chatApi = {
         userFriendlyMessage = 'The request to Prahar Assistant timed out (10s). The server or AI provider may be overloaded.';
       } else if (!err.response) {
         errorType = 'BACKEND_UNAVAILABLE';
-        userFriendlyMessage = 'Prahar backend server is unreachable (port 8080). Please check your connection or backend status.';
+        userFriendlyMessage = 'Prahar backend server is currently unreachable. Please check your network connection or verify that the backend API is online.';
+      } else if (statusCode === 404) {
+        errorType = 'ENDPOINT_NOT_FOUND';
+        userFriendlyMessage = 'Chatbot endpoint not found (HTTP 404). Verify that VITE_API_URL is configured in your deployment settings and points to the live backend API ending in /api.';
       } else if (statusCode === 401 || statusCode === 403) {
         errorType = 'AUTH_ERROR';
         userFriendlyMessage = 'Authorization check failed for this chat session.';

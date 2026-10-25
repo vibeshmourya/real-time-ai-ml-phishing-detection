@@ -1,4 +1,4 @@
-import client from './client';
+import client, { getApiBaseUrl } from './client';
 
 export const notificationApi = {
   /**
@@ -64,7 +64,7 @@ export const notificationApi = {
    * Create an EventSource connection for real-time SSE stream
    */
   createEventSource: (token) => {
-    const baseUrl = import.meta.env.VITE_API_URL || '/api';
+    const baseUrl = getApiBaseUrl();
     const streamUrl = `${baseUrl}/notifications/stream?token=${encodeURIComponent(token)}`;
     return new EventSource(streamUrl);
   }
