@@ -264,7 +264,7 @@ export default function ChatAssistantPage({ setActiveTab }) {
                     {m.content}
 
                     {/* Action Checklist Badge */}
-                    {m.actionChecklist && m.actionChecklist.length > 0 && (
+                    {m.actionChecklist && m.actionChecklist.length > 0 && !m.isLiveAi && (
                       <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
                         <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1">
                           <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
@@ -286,13 +286,8 @@ export default function ChatAssistantPage({ setActiveTab }) {
                     {isBot && (
                       <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
                         <span>
-                          {m.timestamp} 
-                          {m.isOfflineFallback 
-                            ? ' • Prahar Offline Rules' 
-                            : m.isLiveAi 
-                            ? ` • AI (${m.provider})` 
-                            : ' • Safety Engine'}
-                          {m.intent && ` • ${m.intent.replace(/_/g, ' ')}`}
+                          {m.timestamp}
+                          {m.isOfflineFallback && ' • Offline mode'}
                         </span>
                         <button
                           onClick={() => copyText(m.id, m.content)}

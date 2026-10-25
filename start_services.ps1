@@ -43,7 +43,7 @@ if (-not $SkipBackend) {
 
     $ConfigureAi = Read-Host "  Would you like to configure Google Gemini AI provider? (y/N)"
     $AiProvider = "none"
-    $AiModel = "gemini-2.5-flash"
+    $AiModel = "gemini-1.5-flash"
     $AiUrl = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 
     if ($ConfigureAi -match "^[yY]") {

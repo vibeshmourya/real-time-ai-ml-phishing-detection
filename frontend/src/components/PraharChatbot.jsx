@@ -387,7 +387,7 @@ export default function PraharChatbot() {
                       </div>
 
                       {/* Immediate Action Checklist */}
-                      {!isUser && msg.actionChecklist && msg.actionChecklist.length > 0 && (
+                      {!isUser && msg.actionChecklist && msg.actionChecklist.length > 0 && !msg.isLiveAi && (
                         <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
                           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                             Immediate Action Checklist:
@@ -410,11 +410,10 @@ export default function PraharChatbot() {
                         <div className="mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
                           <span>
                             {msg.isOfflineFallback
-                              ? 'Prahar Offline Rules'
+                              ? 'Offline mode'
                               : msg.isLiveAi 
-                              ? `Live AI (${msg.provider})` 
-                              : 'Prahar Safety Engine'}
-                            {msg.intent ? ` • ${msg.intent.replace(/_/g, ' ')}` : ''}
+                              ? `AI Assistant (${msg.provider})` 
+                              : 'Prahar Assistant'}
                           </span>
                           <button
                             onClick={() => handleCopyText(msg.id, msg.content)}

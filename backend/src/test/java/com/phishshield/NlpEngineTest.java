@@ -146,4 +146,70 @@ class NlpEngineTest {
         assertEquals(NlpIntent.UNRELATED_QUERY, res.getIntent());
         assertFalse(res.isFollowUp());
     }
+
+    @Test
+    @DisplayName("Test Assistant Identity queries - 'tell me about u', 'who are you'")
+    void testAssistantIdentityClassification() {
+        IntentClassifier.ClassificationResult res1 = IntentClassifier.classify(
+                NlpNormalizer.normalize("tell me about u"),
+                new DialogueContext(),
+                new ExtractedEntities()
+        );
+        assertEquals(NlpIntent.ASSISTANT_IDENTITY, res1.getIntent());
+
+        IntentClassifier.ClassificationResult res2 = IntentClassifier.classify(
+                NlpNormalizer.normalize("who are you"),
+                new DialogueContext(),
+                new ExtractedEntities()
+        );
+        assertEquals(NlpIntent.ASSISTANT_IDENTITY, res2.getIntent());
+    }
+
+    @Test
+    @DisplayName("Test Fake Shopping Scam queries - 'ordered an item from fake webpage'")
+    void testFakeShoppingScamClassification() {
+        IntentClassifier.ClassificationResult res = IntentClassifier.classify(
+                NlpNormalizer.normalize("i think i have opened a fake webpage of a shopping site and i have ordered an item from it"),
+                new DialogueContext(),
+                new ExtractedEntities()
+        );
+        assertEquals(NlpIntent.FAKE_SHOPPING_SCAM, res.getIntent());
+    }
+
+    @Test
+    @DisplayName("Test General Cyber Safety queries - 'how can i be safe from any attacks or online frauds'")
+    void testGeneralCyberSafetyClassification() {
+        IntentClassifier.ClassificationResult res = IntentClassifier.classify(
+                NlpNormalizer.normalize("how can i be safe from any attacks or online frauds"),
+                new DialogueContext(),
+                new ExtractedEntities()
+        );
+        assertEquals(NlpIntent.GENERAL_CYBER_SAFETY, res.getIntent());
+    }
+
+    @Test
+    @DisplayName("Test OTP disclosure with informal slang - 'bro i gave my otp to someone'")
+    void testOtpDisclosureSlangClassification() {
+        IntentClassifier.ClassificationResult res = IntentClassifier.classify(
+                NlpNormalizer.normalize("bro i gave my otp to someone"),
+                new DialogueContext(),
+                new ExtractedEntities()
+        );
+        assertEquals(NlpIntent.OTP_DISCLOSURE, res.getIntent());
+    }
+
+    @Test
+    @DisplayName("Test Multi-turn shopping scam slot tracking for payment method follow-up")
+    void testShoppingPaymentSlotTracking() {
+        DialogueContext context = new DialogueContext();
+        context.setLastIntent(NlpIntent.FAKE_SHOPPING_SCAM);
+        context.setAwaitingSlot("shopping_payment_details");
+
+        ExtractedEntities entities = new ExtractedEntities();
+        entities.setPaymentChannel("UPI");
+
+        IntentClassifier.ClassificationResult followUpRes = IntentClassifier.classify("upi", context, entities);
+        assertTrue(followUpRes.isFollowUp());
+        assertEquals(NlpIntent.FAKE_SHOPPING_SCAM, followUpRes.getIntent());
+    }
 }
