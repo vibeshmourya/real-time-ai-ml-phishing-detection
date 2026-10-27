@@ -69,9 +69,35 @@ public class DialogueContext {
             case "sharedotp":
             case "sharedotporcredentials":
                 return accumulatedEntities.getSharedOtp() != null ? String.valueOf(accumulatedEntities.getSharedOtp()) : null;
+            case "bankdetailsentered":
+            case "bankdetails":
+                return accumulatedEntities.getBankDetailsEntered() != null ? String.valueOf(accumulatedEntities.getBankDetailsEntered()) : null;
+            case "credentialsdisclosed":
+                return accumulatedEntities.getCredentialsDisclosed() != null ? String.valueOf(accumulatedEntities.getCredentialsDisclosed()) : null;
+            case "moneylost":
+                return accumulatedEntities.getMoneyLost() != null ? String.valueOf(accumulatedEntities.getMoneyLost()) : null;
+            case "actiontaken":
+            case "protectiveactiontaken":
+                return accumulatedEntities.getProtectiveActionTaken() != null ? String.valueOf(accumulatedEntities.getProtectiveActionTaken()) : null;
             default:
                 return null;
         }
+    }
+
+    public boolean isBankDetailsEntered() {
+        return accumulatedEntities != null && accumulatedEntities.isBankDetailsEntered();
+    }
+
+    public boolean isSharedOtp() {
+        return accumulatedEntities != null && Boolean.TRUE.equals(accumulatedEntities.getSharedOtp());
+    }
+
+    public boolean isMoneyLost() {
+        return accumulatedEntities != null && accumulatedEntities.isMoneyLost();
+    }
+
+    public boolean isProtectiveActionTaken() {
+        return accumulatedEntities != null && accumulatedEntities.isProtectiveActionTaken();
     }
 
     public void mergeEntities(ExtractedEntities newEntities) {
@@ -84,6 +110,10 @@ public class DialogueContext {
         if (newEntities.getClickedLink() != null) accumulatedEntities.setClickedLink(newEntities.getClickedLink());
         if (newEntities.getSharedOtp() != null) accumulatedEntities.setSharedOtp(newEntities.getSharedOtp());
         if (newEntities.getInstalledApk() != null) accumulatedEntities.setInstalledApk(newEntities.getInstalledApk());
+        if (newEntities.getBankDetailsEntered() != null) accumulatedEntities.setBankDetailsEntered(newEntities.getBankDetailsEntered());
+        if (newEntities.getCredentialsDisclosed() != null) accumulatedEntities.setCredentialsDisclosed(newEntities.getCredentialsDisclosed());
+        if (newEntities.getMoneyLost() != null) accumulatedEntities.setMoneyLost(newEntities.getMoneyLost());
+        if (newEntities.getProtectiveActionTaken() != null) accumulatedEntities.setProtectiveActionTaken(newEntities.getProtectiveActionTaken());
         if (newEntities.getUserActionTaken() != null) accumulatedEntities.setUserActionTaken(newEntities.getUserActionTaken());
     }
 }

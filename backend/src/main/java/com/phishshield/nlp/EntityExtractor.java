@@ -55,7 +55,7 @@ public class EntityExtractor {
         }
 
         // 4. Direction
-        if (lower.contains("debited") || lower.contains("spent") || lower.contains("kat gaya") || lower.contains("deducted") || lower.contains("lost") || lower.contains("sent")) {
+        if (lower.contains("debited") || lower.contains("spent") || lower.contains("kat gaya") || lower.contains("deducted") || lower.contains("lost") || lower.contains("sent") || lower.contains("stole") || lower.contains("stolen") || lower.contains("taken")) {
             entities.setDirection("DEBIT");
         } else if (lower.contains("credited") || lower.contains("received") || lower.contains("refund") || lower.contains("got money")) {
             entities.setDirection("CREDIT");
@@ -75,15 +75,61 @@ public class EntityExtractor {
         else if (lower.contains("amazon")) entities.setInstitution("Amazon");
         else if (lower.contains("flipkart")) entities.setInstitution("Flipkart");
 
-        // 6. Security compromise flags
+        // 6. Security compromise & incident facts
         if (lower.contains("clicked") || lower.contains("opened the link") || lower.contains("tapped the link") || lower.contains("visited")) {
             entities.setClickedLink(true);
         }
-        if (lower.contains("otp") || lower.contains("password") || lower.contains("pin") || lower.contains("shared code") || lower.contains("gave otp")) {
+
+        // Bank details disclosure (confirmed fact)
+        if (lower.contains("entered my bank") || lower.contains("entered bank") || lower.contains("shared my bank") ||
+            lower.contains("entered bank details") || lower.contains("shared bank details") ||
+            ((lower.contains("bank detail") || lower.contains("banking detail") || lower.contains("account detail") ||
+              lower.contains("card detail") || lower.contains("debit card") || lower.contains("credit card") ||
+              lower.contains("cvv") || lower.contains("account number")) &&
+             (lower.contains("enter") || lower.contains("shar") || lower.contains("gave") || lower.contains("typ") ||
+              lower.contains("provid") || lower.contains("put") || lower.contains("fill")))) {
+            entities.setBankDetailsEntered(true);
+        }
+
+        // OTP / PIN disclosure (confirmed fact)
+        if ((lower.contains("otp") || lower.contains("verification code") || lower.contains("one time password") ||
+             lower.contains("upi pin") || lower.contains("atm pin") || lower.contains("security code")) &&
+            (lower.contains("shar") || lower.contains("gave") || lower.contains("enter") || lower.contains("typ") ||
+             lower.contains("provid") || lower.contains("sent") || lower.contains("told") || lower.contains("leak") ||
+             lower.contains("de diya") || lower.contains("shared code"))) {
+            entities.setSharedOtp(true);
+        } else if (lower.equals("shared otp") || lower.equals("gave otp") || lower.equals("entered otp") ||
+                   lower.contains("shared the otp") || lower.contains("shared otp too")) {
             entities.setSharedOtp(true);
         }
-        if (lower.contains("apk") || lower.contains("installed app") || lower.contains("downloaded app") || lower.contains("anydesk") || lower.contains("teamviewer") || lower.contains("rustdesk")) {
+
+        // Password / login credentials disclosure
+        if ((lower.contains("password") || lower.contains("credentials") || lower.contains("login details") ||
+             lower.contains("netbanking password")) &&
+            (lower.contains("enter") || lower.contains("shar") || lower.contains("gave") || lower.contains("typ") ||
+             lower.contains("fill") || lower.contains("provid"))) {
+            entities.setCredentialsDisclosed(true);
+        }
+
+        // Malicious App / APK / Remote access
+        if (lower.contains("apk") || lower.contains("installed app") || lower.contains("downloaded app") ||
+            lower.contains("anydesk") || lower.contains("teamviewer") || lower.contains("rustdesk")) {
             entities.setInstalledApk(true);
+        }
+
+        // Unauthorized debit / money loss (confirmed fact)
+        if (lower.contains("money deducted") || lower.contains("money was deducted") || lower.contains("debited") ||
+            lower.contains("kat gaya") || lower.contains("paise kat") || lower.contains("money lost") ||
+            lower.contains("unauthorized debit") || lower.contains("someone stole") ||
+            lower.contains("transferred money to a scammer") || lower.contains("sent money to a scammer")) {
+            entities.setMoneyLost(true);
+        }
+
+        // Protective action already taken by user
+        if (lower.contains("blocked my card") || lower.contains("froze my card") || lower.contains("froze my account") ||
+            lower.contains("changed my password") || lower.contains("already reported") || lower.contains("already called") ||
+            lower.contains("already blocked") || lower.contains("locked my card")) {
+            entities.setProtectiveActionTaken(true);
         }
 
         // 7. Transaction Reference

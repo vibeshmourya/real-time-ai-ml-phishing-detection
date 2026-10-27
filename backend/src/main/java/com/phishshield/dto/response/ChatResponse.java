@@ -13,6 +13,7 @@ public class ChatResponse {
     private String provider; // "openai", "gemini", or "prahar_nlp"
     private String intent;
     private Double confidence;
+    private boolean isFollowUp;
     private java.util.Map<String, Object> extractedEntities;
     private List<String> followUpSuggestions;
     private List<String> actionChecklist;
@@ -45,6 +46,9 @@ public class ChatResponse {
 
     public Double getConfidence() { return confidence; }
     public void setConfidence(Double confidence) { this.confidence = confidence; }
+
+    public boolean isFollowUp() { return isFollowUp; }
+    public void setFollowUp(boolean followUp) { isFollowUp = followUp; }
 
     public java.util.Map<String, Object> getExtractedEntities() { return extractedEntities; }
     public void setExtractedEntities(java.util.Map<String, Object> extractedEntities) { this.extractedEntities = extractedEntities; }

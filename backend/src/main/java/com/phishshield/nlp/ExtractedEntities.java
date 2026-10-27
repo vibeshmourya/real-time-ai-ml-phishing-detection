@@ -13,6 +13,10 @@ public class ExtractedEntities {
     private Boolean clickedLink;
     private Boolean sharedOtp;
     private Boolean installedApk;
+    private Boolean bankDetailsEntered;
+    private Boolean credentialsDisclosed;
+    private Boolean moneyLost;
+    private Boolean protectiveActionTaken;
     private String userActionTaken;
     private String detectedLanguage = "en";
 
@@ -43,11 +47,27 @@ public class ExtractedEntities {
 
     public Boolean getSharedOtp() { return sharedOtp; }
     public void setSharedOtp(Boolean sharedOtp) { this.sharedOtp = sharedOtp; }
-    public boolean isSharedOtpOrCredentials() { return Boolean.TRUE.equals(sharedOtp); }
+    public boolean isSharedOtpOrCredentials() { return Boolean.TRUE.equals(sharedOtp) || Boolean.TRUE.equals(credentialsDisclosed); }
 
     public Boolean getInstalledApk() { return installedApk; }
     public void setInstalledApk(Boolean installedApk) { this.installedApk = installedApk; }
     public boolean isDownloadedApp() { return Boolean.TRUE.equals(installedApk); }
+
+    public Boolean getBankDetailsEntered() { return bankDetailsEntered; }
+    public void setBankDetailsEntered(Boolean bankDetailsEntered) { this.bankDetailsEntered = bankDetailsEntered; }
+    public boolean isBankDetailsEntered() { return Boolean.TRUE.equals(bankDetailsEntered); }
+
+    public Boolean getCredentialsDisclosed() { return credentialsDisclosed; }
+    public void setCredentialsDisclosed(Boolean credentialsDisclosed) { this.credentialsDisclosed = credentialsDisclosed; }
+    public boolean isCredentialsDisclosed() { return Boolean.TRUE.equals(credentialsDisclosed); }
+
+    public Boolean getMoneyLost() { return moneyLost; }
+    public void setMoneyLost(Boolean moneyLost) { this.moneyLost = moneyLost; }
+    public boolean isMoneyLost() { return Boolean.TRUE.equals(moneyLost); }
+
+    public Boolean getProtectiveActionTaken() { return protectiveActionTaken; }
+    public void setProtectiveActionTaken(Boolean protectiveActionTaken) { this.protectiveActionTaken = protectiveActionTaken; }
+    public boolean isProtectiveActionTaken() { return Boolean.TRUE.equals(protectiveActionTaken); }
 
     public String getUserActionTaken() { return userActionTaken; }
     public void setUserActionTaken(String userActionTaken) { this.userActionTaken = userActionTaken; }
@@ -56,6 +76,6 @@ public class ExtractedEntities {
     public void setDetectedLanguage(String detectedLanguage) { this.detectedLanguage = detectedLanguage; }
 
     public boolean hasAnyFinancialEntity() {
-        return amount != null || paymentChannel != null || institution != null || direction != null;
+        return amount != null || paymentChannel != null || institution != null || direction != null || Boolean.TRUE.equals(bankDetailsEntered) || Boolean.TRUE.equals(moneyLost);
     }
 }

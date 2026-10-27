@@ -297,6 +297,7 @@ public class ChatService {
                                         ExtractedEntities entities) {
         response.setIntent(classification.getIntent().name());
         response.setConfidence(classification.getConfidence());
+        response.setFollowUp(classification.isFollowUp());
 
         Map<String, Object> entityMap = new LinkedHashMap<>();
         if (entities.getAmount() != null) entityMap.put("amount", entities.getAmount().toPlainString());
@@ -305,6 +306,9 @@ public class ChatService {
         if (entities.getInstitution() != null) entityMap.put("institution", entities.getInstitution());
         if (entities.isClickedLink()) entityMap.put("clickedLink", true);
         if (entities.isSharedOtpOrCredentials()) entityMap.put("sharedOtpOrCredentials", true);
+        if (entities.isBankDetailsEntered()) entityMap.put("bankDetailsEntered", true);
+        if (entities.isMoneyLost()) entityMap.put("moneyLost", true);
+        if (entities.isProtectiveActionTaken()) entityMap.put("protectiveActionTaken", true);
         if (entities.isDownloadedApp()) entityMap.put("downloadedApp", true);
         if (entities.getTransactionReference() != null) entityMap.put("reference", entities.getTransactionReference());
 
@@ -317,7 +321,6 @@ public class ChatService {
 
         int start = Math.max(0, history.size() - 10);
         String lastAssistantText = null;
-        String lastUserText = null;
 
         for (int i = start; i < history.size(); i++) {
             ChatMessageDto msg = history.get(i);
@@ -329,11 +332,10 @@ public class ChatService {
                 if ("assistant".equalsIgnoreCase(role)) {
                     lastAssistantText = cleanTurn.toLowerCase();
                 } else {
-                    lastUserText = cleanTurn;
                     ExtractedEntities turnEntities = EntityExtractor.extract(cleanTurn);
                     context.mergeEntities(turnEntities);
                     String normTurn = NlpNormalizer.normalize(cleanTurn);
-                    IntentClassifier.ClassificationResult turnClass = IntentClassifier.classify(normTurn, null, turnEntities);
+                    IntentClassifier.ClassificationResult turnClass = IntentClassifier.classify(normTurn, context, turnEntities);
                     if (turnClass.getIntent() != NlpIntent.AMBIGUOUS_QUERY && turnClass.getIntent() != NlpIntent.UNRELATED_QUERY) {
                         context.setLastIntent(turnClass.getIntent());
                     }
@@ -355,8 +357,12 @@ public class ChatService {
             } else if (lastAssistantText.contains("share your otp") || lastAssistantText.contains("share an otp") || 
                        lastAssistantText.contains("entered your upi pin") || lastAssistantText.contains("did you share") ||
                        lastAssistantText.contains("did you enter a password") || lastAssistantText.contains("only open the link") ||
-                       lastAssistantText.contains("did the money actually debit") || lastAssistantText.contains("did you enter any passwords")) {
+                       lastAssistantText.contains("did the money actually debit") || lastAssistantText.contains("did you enter any passwords") ||
+                       lastAssistantText.contains("bank details, or otps") || lastAssistantText.contains("password, otp, or payment details")) {
                 context.setAwaitingSlot("otp_or_link_shared");
+            } else if (lastAssistantText.contains("was any money deducted") || lastAssistantText.contains("unexpected otp") ||
+                       lastAssistantText.contains("which bank or service was the otp for")) {
+                context.setAwaitingSlot("debit_or_otp_status");
             } else if (lastAssistantText.contains("which type of account") || lastAssistantText.contains("what account")) {
                 context.setAwaitingSlot("account_type");
             } else if (lastAssistantText.contains("worried someone might access") || lastAssistantText.contains("unknown login or transaction")) {
@@ -377,11 +383,39 @@ public class ChatService {
         return cleaned;
     }
 
+    public enum ResponseDetailLevel {
+        SHORT,
+        DEFAULT,
+        DETAILED
+    }
+
+    public ResponseDetailLevel determineDetailLevel(String userMessage) {
+        if (userMessage == null) return ResponseDetailLevel.DEFAULT;
+        String lower = userMessage.toLowerCase().trim();
+        if (lower.contains("one sentence") || lower.contains("1 sentence") || lower.contains("in short") ||
+            lower.contains("briefly") || lower.contains("shortly") || lower.contains("in simple words") ||
+            lower.contains("simple words") || lower.contains("simple language") || lower.contains("tldr") ||
+            lower.contains("quick definition") || lower.contains("short definition") || lower.contains("just a definition") ||
+            lower.contains("in one sentence")) {
+            return ResponseDetailLevel.SHORT;
+        }
+        if (lower.contains("in detail") || lower.contains("detailed") || lower.contains("step by step") ||
+            lower.contains("step-by-step") || lower.contains("assignment") || lower.contains("complete guide") ||
+            lower.contains("comprehensive") || lower.contains("technical analysis") || lower.contains("deep dive") ||
+            lower.contains("in-depth") || lower.contains("elaborate") || lower.contains("detailed explanation")) {
+            return ResponseDetailLevel.DETAILED;
+        }
+        return ResponseDetailLevel.DEFAULT;
+    }
+
     private ChatResponse callLiveAiProvider(ChatRequest request,
                                             String userMessage,
                                             IntentClassifier.ClassificationResult classification,
                                             DialogueContext context) throws Exception {
-        return callLiveAiProviderInternal(request, userMessage, classification, context, 700);
+        ResponseDetailLevel detailLevel = determineDetailLevel(userMessage);
+        int maxTokens = (detailLevel == ResponseDetailLevel.SHORT) ? 150 :
+                        (detailLevel == ResponseDetailLevel.DETAILED) ? 1024 : 400;
+        return callLiveAiProviderInternal(request, userMessage, classification, context, maxTokens);
     }
 
     private ChatResponse callLiveAiProviderInternal(ChatRequest request,
@@ -685,6 +719,18 @@ public class ChatService {
         sb.append("16. Prioritize India's 1930 National Cyber Crime Helpline (Golden Hour window), official reporting at cybercrime.gov.in, and official bank customer care channels for financial fraud.\n");
         sb.append("17. Detected user intent: ").append(classification.getIntent()).append(".\n");
 
+        ResponseDetailLevel detailLevel = determineDetailLevel(request != null ? request.getMessage() : null);
+        sb.append("\nAdaptive Response Length & Conciseness Directives:\n");
+        sb.append("- Default Response Policy: Answer the user's latest question directly, clearly, and concisely. Never include introductory filler, repetition of the user's prompt, or generic safety lectures on simple questions.\n");
+        sb.append("- Simple Definitions & Factual Requests (e.g., 'What is phishing?', 'What is OTP?', 'What is UPI?', 'What is a firewall?', 'What is Prahar?'): Default to roughly 1–3 short sentences (approximately 20–60 words) in accessible everyday English. Do not add markdown headers, lists, or checklists unless explicitly asked.\n");
+        sb.append("- Moderate Detail Questions (e.g., 'How can I identify a fake website?', 'How do I protect my account?'): Provide a concise overview followed by roughly 3–5 bulleted points. Do not repeat advice in redundant lists.\n");
+        sb.append("- Incident Containment (e.g., 'I already transferred money to a scammer'): Put urgent containment actions first (1930 helpline, bank contact, dispute reference). Ask only for details that materially alter next steps.\n");
+        if (detailLevel == ResponseDetailLevel.SHORT) {
+            sb.append("- User Detail Preference: SHORT/BRIEF. Provide a crystal-clear, direct definition or answer in 1–2 short sentences.\n");
+        } else if (detailLevel == ResponseDetailLevel.DETAILED) {
+            sb.append("- User Detail Preference: DETAILED/COMPREHENSIVE. Provide in-depth technical analysis, structured sections, and complete guidance without artificial word limits.\n");
+        }
+
         sb.append("\nMultilingual Directives:\n");
         sb.append("- Respond in the language requested by the user.\n");
         sb.append("- If the user asks in Kannada (or queries in Kannada script), answer in fluent, clear Kannada.\n");
@@ -766,7 +812,7 @@ public class ChatService {
                 break;
 
             case UNKNOWN_DEBIT:
-                buildUnknownDebitResponse(reply, context);
+                buildUnknownDebitResponse(reply, context, userMessage);
                 break;
 
             case UNKNOWN_CREDIT:
@@ -774,7 +820,7 @@ public class ChatService {
                 break;
 
             case UPI_FRAUD:
-                buildUpiFraudResponse(reply, context);
+                buildUpiFraudResponse(reply, context, userMessage);
                 break;
 
             case ATM_CARD_FRAUD:
@@ -787,7 +833,7 @@ public class ChatService {
                 break;
 
             case ASSISTANT_IDENTITY:
-                buildAssistantIdentityResponse(reply);
+                buildAssistantIdentityResponse(reply, userMessage);
                 break;
 
             case FAKE_SHOPPING_SCAM:
@@ -982,7 +1028,21 @@ public class ChatService {
         reply.append("To view your financial transaction summary, please log in and visit the **My Money** section.");
     }
 
-    private void buildUnknownDebitResponse(StringBuilder reply, DialogueContext context) {
+    private void buildUnknownDebitResponse(StringBuilder reply, DialogueContext context, String userMessage) {
+        String lower = userMessage != null ? userMessage.toLowerCase() : "";
+        boolean transferredToScammer = lower.contains("transferred money to a scammer") ||
+                lower.contains("transferred money to scammer") ||
+                lower.contains("sent money to a scammer") ||
+                lower.contains("paid a scammer") ||
+                (lower.contains("transferred money") && lower.contains("scam"));
+
+        if (transferredToScammer) {
+            reply.append("Act immediately: contact your bank or payment provider through its official channel and report the suspected financial cyber fraud in India by calling **1930** or registering at [cybercrime.gov.in](https://cybercrime.gov.in/). Preserve the transaction ID, payment receipts, and chat messages. Do not send more money or share any OTP or PIN.\n\n");
+            reply.append("Which payment method was used? (UPI, Net Banking, or Debit/Credit Card)");
+            context.setPendingSlot("payment_channel");
+            return;
+        }
+
         String amountStr = context.getSlot("amount");
         String channel = context.getSlot("paymentChannel");
 
@@ -1023,9 +1083,26 @@ public class ChatService {
         reply.append("4. **Never share OTPs:** Even to 'cancel' or 'reverse' a credit, you never need to enter an OTP or UPI PIN.");
     }
 
-    private void buildUpiFraudResponse(StringBuilder reply, DialogueContext context) {
-        reply.append("Act quickly: contact your bank through its official channel and report the unauthorized transaction through India's official cybercrime reporting service (call **1930** or visit [cybercrime.gov.in](https://cybercrime.gov.in/)).\n\n");
-        reply.append("Don't share any more OTPs or UPI PINs. Was the money actually debited, and when did it happen?");
+    private void buildUpiFraudResponse(StringBuilder reply, DialogueContext context, String userMessage) {
+        String lower = userMessage != null ? userMessage.toLowerCase() : "";
+
+        // Follow-up question continuation (e.g., "What should I do next?")
+        if (IntentClassifier.isFollowUpQuery(lower)) {
+            reply.append("Here are your prioritized next steps for the unauthorized UPI transaction:\n\n");
+            reply.append("1. **Report to 1930 Cyber Helpline**: Call India's National Cyber Crime Helpline (**1930**) or submit a complaint at [cybercrime.gov.in](https://cybercrime.gov.in/) with the 12-digit UTR number. Reporting within the Golden Hour enables authorities to flag and freeze destination accounts.\n");
+            reply.append("2. **File Written Bank Dispute**: Contact your bank's 24x7 customer care or visit your home branch to file a formal dispute under RBI's electronic banking guidelines to preserve zero-liability protection.\n");
+            reply.append("3. **Reset UPI PIN**: Open your official bank app and reset your UPI PIN from a secure device. Never enter your PIN in response to unknown collect requests.\n");
+            reply.append("4. **Preserve Evidence**: Save screenshots of the debit SMS, transaction details (UTR number), and any fraudulent communications.");
+            return;
+        }
+
+        String amountStr = context != null ? context.getSlot("amount") : null;
+        if (amountStr != null) {
+            reply.append("For the unauthorized debit of **₹").append(amountStr).append("** via UPI:\n\n");
+        }
+        reply.append("Act quickly: locate the **12-digit UTR / UPI Reference Number** in your UPI app (Google Pay, PhonePe, Paytm, BHIM) and raise a dispute inside the app immediately under *'Having an issue with this transaction'*.\n\n");
+        reply.append("Contact your bank through its official channel and report the unauthorized transaction through India's official cybercrime reporting service (call **1930** or visit [cybercrime.gov.in](https://cybercrime.gov.in/)).\n\n");
+        reply.append("Remember: **Entering a UPI PIN ALWAYS deducts money, never receives it.** Don't share any more OTPs or UPI PINs. Was the money actually debited, and when did it happen?");
         context.setPendingSlot("otp_or_link_shared");
     }
 
@@ -1041,7 +1118,8 @@ public class ChatService {
         String lower = userMessage != null ? userMessage.toLowerCase() : "";
         boolean isGeneralInquiry = (lower.contains("account safety") || lower.contains("help me with account safety") || 
                 lower.contains("how to secure") || lower.contains("protect my account") || lower.contains("keep account safe")) && 
-                !lower.contains("hacked") && !lower.contains("stolen") && !lower.contains("stole") && !lower.contains("otp") && !lower.contains("unauthorized");
+                !lower.contains("hacked") && !lower.contains("stolen") && !lower.contains("stole") && !lower.contains("otp") &&
+                !lower.contains("unauthorized") && !IntentClassifier.isFollowUpQuery(lower);
 
         if (isGeneralInquiry) {
             reply.append("Of course! I can help you secure your accounts.\n\n");
@@ -1050,12 +1128,61 @@ public class ChatService {
             return;
         }
 
-        boolean isOtpDisclosure = lower.contains("otp") || lower.contains("gave my otp") || lower.contains("shared my otp") || lower.contains("gave otp");
+        // Contextual follow-up continuation (e.g., "What should I do now?", "What should I do next?")
+        if (IntentClassifier.isFollowUpQuery(lower)) {
+            if (context.isBankDetailsEntered() || lower.contains("bank") || lower.contains("card") || lower.contains("account")) {
+                reply.append("Here are your prioritized next steps to protect your finances:\n\n");
+                reply.append("1. **Check Statements & Alerts**: Open your banking app right now to verify if any unauthorized debit or pending charge has occurred.\n");
+                reply.append("2. **Contact Bank's Fraud Desk**: Call your bank's 24x7 customer care number (printed on your card) to freeze the card or temporarily lock NetBanking access.\n");
+                reply.append("3. **Report to 1930 Cyber Helpline**: If any unauthorized transaction occurred or occurs, call India's National Cyber Crime Helpline (**1930**) immediately or lodge a report at [cybercrime.gov.in](https://cybercrime.gov.in/) within the Golden Hour window.\n");
+                reply.append("4. **Update Online Credentials**: Change your NetBanking password and UPI PIN from a clean device. Never approve or disclose any incoming OTP.");
+                return;
+            }
+            if (context.isSharedOtp() || lower.contains("otp") || lower.contains("pin")) {
+                reply.append("To protect your account after the OTP disclosure, prioritize these immediate actions:\n\n");
+                reply.append("1. **Check for Unauthorized Debits**: Inspect your account balance and SMS notifications right away.\n");
+                reply.append("2. **Call 1930 Helpline**: Contact India's National Cyber Crime Helpline (**1930**) or report on [cybercrime.gov.in](https://cybercrime.gov.in/) so the destination account can be put on hold.\n");
+                reply.append("3. **Freeze Electronic Banking**: Call your bank's 24x7 helpline to block linked debit cards and NetBanking.\n");
+                reply.append("4. **Reset Credentials**: Change your passwords and PINs immediately, and choose 'Log out of all existing sessions'.");
+                return;
+            }
+            reply.append("Here are your prioritized next steps:\n\n");
+            reply.append("1. **Secure Accounts**: Change passwords for your email and banking accounts from a clean device.\n");
+            reply.append("2. **Terminate Active Sessions**: Log out of all active web and mobile sessions.\n");
+            reply.append("3. **Enable Two-Factor Authentication**: Turn on 2FA using an authenticator app.\n");
+            reply.append("4. **Report Suspicious Incidents**: Call the 1930 Helpline if you suspect any financial compromise.");
+            return;
+        }
+
+        // Bank details disclosure (confirmed fact: user entered sensitive financial details)
+        boolean isBankDetailsEntered = context.isBankDetailsEntered() ||
+                lower.contains("bank detail") || lower.contains("banking detail") ||
+                lower.contains("account detail") || lower.contains("card detail") ||
+                lower.contains("entered my bank") || lower.contains("entered bank") ||
+                lower.contains("shared bank details") || lower.contains("entered card") ||
+                lower.contains("entered cvv");
+
+        if (isBankDetailsEntered) {
+            reply.append("Since you entered your bank details on an untrusted page, your financial information may be exposed. Take these immediate protective steps:\n\n");
+            reply.append("1. **Lock or Freeze Your Card & NetBanking**: Open your official mobile banking app right now and temporarily lock your card and electronic debit channels.\n");
+            reply.append("2. **Contact Your Bank**: Call your bank's 24x7 customer care number (printed on the back of your card) through its official channel to alert their fraud desk.\n");
+            reply.append("3. **Monitor Debits & OTPs**: Watch your SMS and email for any unauthorized debit alerts or OTP requests; never approve or share any verification code.\n");
+            reply.append("4. **Report Unauthorized Charges**: If an unauthorized debit occurs, report immediately to India's National Cyber Crime Helpline (**1930**) or at [cybercrime.gov.in](https://cybercrime.gov.in/).\n\n");
+            reply.append("Was any money deducted from your account, or have you received any unexpected OTPs?");
+            context.setPendingSlot("debit_or_otp_status");
+            return;
+        }
+
+        // OTP / PIN disclosure (confirmed fact: user disclosed OTP)
+        boolean isOtpDisclosure = lower.contains("otp") || lower.contains("gave my otp") || lower.contains("shared my otp") ||
+                lower.contains("gave otp") || lower.contains("shared otp") || lower.contains("pin") ||
+                context.isSharedOtp();
+
         if (isOtpDisclosure) {
             reply.append("Treat this as urgent: Stop sharing any more codes with that person right now.\n\n");
             reply.append("Take these immediate actions to secure your assets:\n");
             reply.append("1. **Freeze or Lock Affected Service**: If this was for your bank, UPI, or card, contact your bank's customer care immediately or lock your accounts through your official banking app.\n");
-            reply.append("2. **Change Credentials**: Update the password or PIN for the affected service from a secure device, and choose *'Log out of all existing sessions'*.\n");
+            reply.append("2. **Change Credentials**: Update the password or PIN for the affected service from a secure device, and choose 'Log out of all existing sessions'.\n");
             reply.append("3. **Call 1930 Helpline**: Report immediately to India's National Cyber Crime Helpline (**1930**) so any fraudulent transfer can be frozen within the Golden Hour.\n\n");
             reply.append("Which type of account was the OTP for? (Bank account, UPI app, WhatsApp, email, or a shopping service?)");
             context.setPendingSlot("account_type");
@@ -1063,11 +1190,11 @@ public class ChatService {
         }
 
         reply.append("### Urgent Protective Action: Account & Credential Compromise\n\n");
-        reply.append("Sharing an OTP or entering your NetBanking password gives scammers immediate unauthorized access. Take these 3 immediate actions:\n\n");
-        reply.append("1. **Immediately Freeze Affected Accounts:** Call your bank's 24x7 emergency helpline or use NetBanking/mobile banking to block all electronic debit channels.\n");
-        reply.append("2. **Change Passwords from a Clean Device:** Do not use the same device if you suspect malware was downloaded. Choose *'Log out of all existing sessions'*.\n");
-        reply.append("3. **Call 1930 Helpline:** Inform the Indian National Cyber Crime Helpline (**1930**) so the fraudulent beneficiary account can be placed on hold.\n");
-        reply.append("4. **File Complaint at [cybercrime.gov.in](https://cybercrime.gov.in/):** Upload screenshots and SMS alerts as supporting evidence.");
+        reply.append("Take these immediate actions to secure your account:\n\n");
+        reply.append("1. **Immediately Freeze Affected Banking Accounts**: Call your bank's 24x7 emergency helpline or use mobile banking to block electronic debit channels if financial credentials were leaked.\n");
+        reply.append("2. **Change Passwords from a Clean Device**: Reset passwords for your accounts and choose 'Log out of all existing sessions'.\n");
+        reply.append("3. **Call 1930 Helpline**: If unauthorized transactions occurred, inform India's National Cyber Crime Helpline (**1930**) or register at [cybercrime.gov.in](https://cybercrime.gov.in/).\n");
+        reply.append("4. **Enable Two-Factor Authentication**: Secure your accounts with an authenticator app.");
     }
 
     private void buildStolenPhoneResponse(StringBuilder reply, DialogueContext context) {
@@ -1099,16 +1226,22 @@ public class ChatService {
     }
 
     private void buildFraudReportingResponse(StringBuilder reply, DialogueContext context) {
-        reply.append("### How to File an Official Cyber Fraud Complaint in India\n\n");
-        reply.append("Prahar organizes your evidence so you can file an official complaint effectively:\n\n");
-        reply.append("1. **Dial 1930 Helpline:** Operate 24x7. Provide transaction ID, date, time, and your bank name.\n");
-        reply.append("2. **Portal Submission:** Visit **[cybercrime.gov.in](https://cybercrime.gov.in/)** -> Report Cyber Crime -> Financial Fraud.\n");
-        reply.append("3. **Evidence Required:**\n");
-        reply.append("   - Bank account statement showing the debit.\n");
-        reply.append("   - SMS alerts received from the bank.\n");
-        reply.append("   - Screenshots of the phishing URL, WhatsApp chat, or QR code.\n");
-        reply.append("   - UTR / UPI transaction reference number.\n\n");
-        reply.append("You can use the **Safety Centre** in Prahar to generate a formal incident report letter automatically.");
+        reply.append("### Official Cyber Financial Fraud Helplines & Reporting Channels in India\n\n");
+        reply.append("If you have been targeted by online fraud or an unauthorized transaction, report immediately through these official channels:\n\n");
+        reply.append("1. **National Cyber Crime Helpline (1930)**:\n");
+        reply.append("   - **Number**: **1930** (Toll-Free, 24x7 across India).\n");
+        reply.append("   - **Authority**: Ministry of Home Affairs (MHA) & Indian Cybercrime Coordination Centre (I4C).\n");
+        reply.append("   - **Purpose**: Powers the **Citizen Financial Cyber Fraud Reporting and Management System (CFCFRMS)**. Reporting within the **Golden Hour (first 2–3 hours)** allows nodal officers to trigger automated freezing of stolen funds across beneficiary banks and wallets before scammers withdraw them.\n\n");
+        reply.append("2. **National Cyber Crime Reporting Portal**:\n");
+        reply.append("   - **Official Website**: **[cybercrime.gov.in](https://cybercrime.gov.in/)**\n");
+        reply.append("   - Select *'Report Cyber Crime'* -> *'Financial Fraud'* to upload evidence (bank statements, SMS alerts, transaction UTR, screenshots).\n\n");
+        reply.append("3. **Telecom Spam & Smishing Helpline (1909)**:\n");
+        reply.append("   - **Number**: **1909** (Call or SMS) or use the TRAI DND 3.0 App to report fraudulent SMS, fake delivery links, and unsolicited KYC calls.\n\n");
+        reply.append("4. **Bank Immediate Response**:\n");
+        reply.append("   - Call the 24x7 emergency helpline printed directly on the reverse of your debit/credit card or inside your official mobile banking app to block cards and NetBanking.\n\n");
+        reply.append("5. **State Cyber Crime Cell / Police Station**:\n");
+        reply.append("   - Visit your nearest Cyber Crime Police Station or local police station with your 1930 complaint acknowledgment number to register a formal FIR if required.\n\n");
+        reply.append("You can also use Prahar's **Safety Centre** to automatically generate a formal bank dispute and cybercell complaint letter.");
     }
 
     private void buildPhishingUrlResponse(StringBuilder reply, ChatRequest request, DialogueContext context, String userMessage) {
@@ -1126,9 +1259,11 @@ public class ChatService {
                 reply.append("2. Ensure your phone or browser operating system is updated.\n");
                 reply.append("3. You can paste the link into Prahar's **Scan** tab to check its threat score.");
                 return;
+            } else if (context.isBankDetailsEntered() || lower.contains("bank details") || lower.contains("entered card") || lower.contains("account details")) {
+                buildCompromiseResponse(reply, context, userMessage);
+                return;
             } else if ("true".equalsIgnoreCase(shared) || lower.contains("entered password") || lower.contains("shared otp") || lower.contains("entered details")) {
-                reply.append("Act immediately: change your password from another device or new tab right away, and enable two-factor authentication (2FA).\n\n");
-                reply.append("If you entered banking or UPI credentials, contact your bank immediately to freeze your card or NetBanking, and call the **1930** Cyber Crime helpline.");
+                buildCompromiseResponse(reply, context, userMessage);
                 return;
             }
 
@@ -1226,7 +1361,24 @@ public class ChatService {
         reply.append("3. **Verify the displayed Merchant Name:** Always inspect the recipient name shown on screen before authorizing any payment.");
     }
 
-    private void buildAssistantIdentityResponse(StringBuilder reply) {
+    private void buildAssistantIdentityResponse(StringBuilder reply, String userMessage) {
+        String lower = userMessage != null ? userMessage.toLowerCase().trim() : "";
+        ResponseDetailLevel detailLevel = determineDetailLevel(userMessage);
+
+        boolean isWhatIsPrahar = lower.equals("what is prahar") || lower.equals("what is prahar?") ||
+                lower.startsWith("what is prahar ") || lower.equals("prahar") || lower.equals("prahar?") ||
+                lower.contains("about prahar");
+
+        if (isWhatIsPrahar && detailLevel != ResponseDetailLevel.DETAILED) {
+            reply.append("Prahar is an AI-powered cybersecurity application designed to detect phishing threats in real time and provide online fraud safety and incident recovery guidance.");
+            return;
+        }
+
+        if (detailLevel == ResponseDetailLevel.SHORT) {
+            reply.append("I'm Prahar AI Assistant, your cybersecurity guide for detecting phishing and handling digital fraud emergencies.");
+            return;
+        }
+
         reply.append("I'm Prahar AI Assistant, your dedicated cybersecurity and digital fraud response advisor.\n\n");
         reply.append("Here is how I can assist you:\n");
         reply.append("- **Suspicious Links & QR Codes**: Paste any link, email, SMS, or QR code into Prahar's **Scan** tab to check for malware, phishing, and domain spoofing.\n");
@@ -1331,16 +1483,23 @@ public class ChatService {
             return;
         }
 
-        // Specific query: How to detect fake websites / How can we detect fake websites?
-        if (lower.contains("detect fake") || lower.contains("spot fake") || lower.contains("identify fake") || lower.contains("fake website") || lower.contains("fake site")) {
-            reply.append("### How to Detect Fake and Fraudulent Websites\n\n");
-            reply.append("Fraudulent websites often mimic legitimate brands to steal credentials or payments. Here are the key indicators to inspect:\n\n");
-            reply.append("1. **Domain Name & Typosquatting**: Inspect the exact domain spelling in your browser address bar. Attackers use lookalikes (e.g., `amaz0n-deal.com` instead of `amazon.com`, or hyphens and abnormal TLDs like `.top`, `.xyz`).\n");
-            reply.append("2. **HTTPS Does NOT Mean Safe**: A green padlock or HTTPS only proves the connection is encrypted; free TLS certificates are easily obtained by scammers. It does not verify the website's authenticity or trustworthiness.\n");
-            reply.append("3. **Payment Gateway Verification**: Genuine e-commerce platforms route payments through recognized payment gateways (e.g., Razorpay, PayU, BillDesk). Fake sites often insist on direct UPI QR code scans, personal phone numbers, or peer-to-peer transfers.\n");
-            reply.append("4. **Unrealistic Discounts & Artificial Urgency**: Extremely low prices (90% off) accompanied by countdown timers are classic social engineering tactics to bypass critical thinking.\n");
-            reply.append("5. **Missing or Generic Contact Info**: Legitimate sites publish verifiable corporate addresses, registered GST numbers, and working customer support helplines.\n");
-            reply.append("6. **Scan with Prahar**: Paste the URL into Prahar's **Scan** tab to check its lexical features, domain age, threat intelligence, and risk score before transacting.");
+        ResponseDetailLevel detailLevel = determineDetailLevel(userMessage);
+
+        // Specific query: How to detect fake websites / "ways to identify a fake website" / "five ways to identify a fake website"
+        if (lower.contains("detect fake") || lower.contains("spot fake") || lower.contains("identify fake") ||
+            lower.contains("fake website") || lower.contains("fake site") || lower.contains("ways to identify")) {
+            
+            if (detailLevel == ResponseDetailLevel.SHORT) {
+                reply.append("To spot a fake website, check for misspelled domain names, unrealistic discounts, payment requests via personal UPI/QR codes, and scan the link in Prahar.");
+                return;
+            }
+            
+            reply.append("To identify a fake or fraudulent website, check these key indicators:\n\n");
+            reply.append("1. **Domain Name & Typosquatting**: Inspect the exact domain spelling in your browser address bar. Attackers use lookalikes (e.g., `amaz0n-deal.top` instead of `amazon.in`).\n");
+            reply.append("2. **HTTPS Does NOT Guarantee Safety**: Scammers easily get free SSL certificates; encryption secures transmission but does not verify website authenticity.\n");
+            reply.append("3. **Unrealistic Discounts & Urgency**: Extremely low prices (90% off) accompanied by countdown timers are social engineering tricks to force rushed decisions.\n");
+            reply.append("4. **Irregular Payment Methods**: Fake sites often demand direct UPI QR code scans or peer-to-peer transfers instead of reputable payment gateways.\n");
+            reply.append("5. **Scan with Prahar**: Paste the URL into Prahar's **Scan** tab to check its domain age, threat intelligence, and risk score before transacting.");
             return;
         }
 
@@ -1408,39 +1567,168 @@ public class ChatService {
             return;
         }
 
-        // Specific query: What is phishing?
-        if (lower.contains("what is phishing") || (lower.contains("phishing") && (lower.startsWith("what is") || lower.contains("explain") || lower.contains("define") || lower.contains("tell me about phishing")))) {
-            reply.append("### Understanding Phishing & How to Protect Yourself\n\n");
-            reply.append("**What is Phishing?**\n");
-            reply.append("Phishing is a deceptive social engineering attack where cybercriminals impersonate legitimate organizations (such as banks, tax authorities, courier services, or e-commerce platforms) to manipulate victims into revealing confidential information, passwords, OTPs, or transferring money.\n\n");
-            reply.append("**Practical Example:**\n");
-            reply.append("An attacker sends an SMS: *'Dear consumer, your electricity connection will be disconnected tonight at 9:30 PM due to pending bill update. Immediately contact power officer at 98765-XXXXX or pay via http://eb-power-update.com'*. When the victim opens the link, a cloned utility webpage prompts for NetBanking login, card details, and SMS OTPs, which the attacker captures.\n\n");
-            reply.append("**Common Delivery Methods:**\n");
-            reply.append("- **Email Phishing**: Fake invoices, security alerts, or password reset requests leading to cloned login portals.\n");
-            reply.append("- **SMS Phishing (Smishing)**: Urgent SMS claiming electricity disconnection, KYC expiry, or uncollected package delivery with a malicious link.\n");
-            reply.append("- **Voice Phishing (Vishing)**: Impersonators posing as bank officials, customs officers, or police demanding payment or remote device access.\n");
-            reply.append("- **QR Phishing (Quishing)**: Malicious QR codes sent under the guise of 'Scan to receive payment'.\n\n");
-            reply.append("**Essential Phishing Defenses:**\n");
-            reply.append("1. **Inspect URLs Carefully**: Check for domain typosquatting, subtle spelling variations, or unusual subdomains before typing any credentials.\n");
-            reply.append("2. **Never Share OTPs or UPI PINs**: Genuine institutions will never ask for your verification code over call, SMS, or email.\n");
-            reply.append("3. **Verify Links with Prahar**: Paste any suspicious link or message into Prahar's **Scan** tab to analyze risk scores and threat indicators before opening.\n");
-            reply.append("4. **Report Suspicious Messages**: Forward fraudulent SMS to **1909** (Telecom Regulator spam reporting) and report scams to India's National Cyber Crime Helpline (**1930**).");
+        // Specific query: Golden Hour in cyber fraud
+        if (lower.contains("golden hour")) {
+            reply.append("### The 'Golden Hour' in Cyber Financial Fraud Explained\n\n");
+            reply.append("**What is the Golden Hour?**\n");
+            reply.append("In cyber financial crimes (such as unauthorized UPI debits, NetBanking hacking, or card fraud), the **Golden Hour** refers to the critical initial window of **2 to 3 hours** immediately following the fraudulent transaction.\n\n");
+            reply.append("**Why is it Crucial?**\n");
+            reply.append("- When you report an unauthorized transfer within this window to the **National Cyber Crime Helpline (1930)** or on **[cybercrime.gov.in](https://cybercrime.gov.in/)**, the Citizen Financial Cyber Fraud Reporting and Management System (CFCFRMS) triggers rapid auto-escalation alerts.\n");
+            reply.append("- These alerts reach the nodal officers of beneficiary banks, payment gateways, and digital wallets, enabling them to place an immediate **hold/freeze** on the stolen funds before the fraudster transfers them across multiple mule accounts or withdraws them via an ATM.\n\n");
+            reply.append("**Operational Clarification & Guarantees:**\n");
+            reply.append("- **Not a Statutory Guarantee**: The Golden Hour is an operational best-practice window that maximizes the mathematical probability of freezing the money; it is **not an absolute recovery guarantee** because organized criminal rings occasionally siphon funds in minutes.\n");
+            reply.append("- **Always Report Regardless of Time**: Even if 12, 24, or 48 hours have passed, you must still immediately dial **1930** and notify your bank. Cyber cells frequently trace, freeze, and recover funds across complex mule trails well after the initial hours.\n\n");
+            reply.append("Have you experienced an unauthorized debit recently? If so, tell me what payment method was used and approximately how long ago it occurred.");
+            return;
+        }
+
+        // Specific query: Bank Frauds help & prevention guide
+        if (lower.contains("bank fraud") || lower.contains("banking fraud") || lower.contains("financial fraud") || 
+            lower.contains("help me with bank") || lower.contains("help with bank fraud")) {
+            reply.append("### Prahar Cybersecurity: Banking & Financial Fraud Protection\n\n");
+            reply.append("Yes, Prahar AI provides complete guidance for preventing, detecting, and responding to banking and cyber financial frauds:\n\n");
+            reply.append("1. **Common Banking Fraud Vectors**:\n");
+            reply.append("   - **Unauthorized UPI Debits**: Fraudulent collect requests, screen-sharing apps, or fake 'scan QR to receive money' traps.\n");
+            reply.append("   - **NetBanking & KYC Phishing**: SMS messages claiming your account or SIM will be blocked unless you enter credentials on a cloned bank portal.\n");
+            reply.append("   - **Card Cloning & Unauthorized POS/E-commerce**: Stolen card details used for transactions where international or online usage was left enabled.\n");
+            reply.append("   - **Malicious Banking Apps (Fake APKs)**: WhatsApp downloads masquerading as bank updates that intercept SMS OTPs.\n\n");
+            reply.append("2. **Immediate Incident Response Protocol**:\n");
+            reply.append("   - **Freeze All Channels**: Contact your bank's 24x7 emergency helpline or use your official banking app to lock debit/credit cards and disable NetBanking.\n");
+            reply.append("   - **Dial 1930 Immediately**: Report to India's National Cyber Crime Helpline (**1930**) or [cybercrime.gov.in](https://cybercrime.gov.in/) within the **Golden Hour** (2–3 hours) to freeze funds in transit.\n");
+            reply.append("   - **RBI 3-Day Zero-Liability Protection**: Under Reserve Bank of India guidelines, reporting unauthorized electronic banking fraud within 3 working days protects you from customer liability.\n\n");
+            reply.append("Are you asking for general cybersecurity prevention, or has an unauthorized transaction or compromise occurred on your account?");
+            return;
+        }
+
+        // Specific query / follow-up: How to identify/spot phishing ("how do i identify it", "how to spot it", "spot fake website")
+        if (lower.contains("identify it") || lower.contains("spot it") || lower.contains("recognize it") || 
+            lower.contains("detect it") || lower.contains("identify phishing") || lower.contains("spot phishing") || 
+            lower.contains("recognize phishing") || lower.contains("how to identify fake") || lower.contains("how do we detect fake") ||
+            lower.contains("how do i spot") || lower.contains("how to spot")) {
+            reply.append("### Key Indicators to Identify & Spot Phishing\n\n");
+            reply.append("To identify whether a message, email, or website is a phishing attempt, look for these 5 telltale red flags:\n\n");
+            reply.append("1. **Artificial Urgency & Threatening Language**:\n");
+            reply.append("   - Attackers create panic: *'Your bank account will be suspended in 24 hours'*, *'Electricity cut off tonight at 9:30 PM'*, or *'Unclaimed prize expires in 10 minutes'* to force hasty decisions.\n\n");
+            reply.append("2. **Mismatched & Lookalike Domains (Typosquatting)**:\n");
+            reply.append("   - Check the address bar closely. Attackers use subtle misspellings (e.g., `sbi-online-kyc.com` instead of `onlinesbi.sbi`, or `amazon-order-track.net` instead of `amazon.in`). Look out for suspicious extensions like `.xyz`, `.top`, or `.cc`.\n\n");
+            reply.append("3. **Demands for Sensitive Credentials**:\n");
+            reply.append("   - Legitimate organizations will **never** ask you to enter or reveal your **OTP**, **UPI PIN**, **ATM PIN**, or **Card CVV** to verify an account or receive funds.\n\n");
+            reply.append("4. **Unsolicited APK Downloads or Remote Access Requests**:\n");
+            reply.append("   - Beware of messages asking you to download an app outside the Google Play Store / Apple App Store, or install remote desk tools (AnyDesk, TeamViewer, QuickSupport) to 'assist' you.\n\n");
+            reply.append("5. **Verify with Prahar's AI Scanner**:\n");
+            reply.append("   - Whenever in doubt, copy the link and paste it into Prahar's **Scan** tab. Prahar analyzes domain age, SSL structure, lexical features, and machine learning models to give an instant safety verdict.");
+            return;
+        }
+
+        // Specific query: What is phishing? (Also matches standalone "phishing", "phishing?", "about phishing", etc.)
+        if (lower.equals("phishing") || lower.equals("phishing?") || lower.equals("phishing!") || 
+            lower.contains("what is phishing") || (lower.contains("phishing") && (lower.startsWith("what is") || lower.contains("explain") || lower.contains("define") || lower.contains("tell me about phishing")))) {
+            
+            if (detailLevel == ResponseDetailLevel.SHORT) {
+                reply.append("Phishing is a scam where attackers impersonate trusted people or organizations to trick you into revealing sensitive information, passwords, or money.");
+                return;
+            }
+            if (detailLevel == ResponseDetailLevel.DETAILED) {
+                reply.append("### Understanding Phishing & How to Protect Yourself\n\n");
+                reply.append("**What is Phishing?**\n");
+                reply.append("Phishing is a deceptive social engineering attack where cybercriminals impersonate legitimate organizations (such as banks, tax authorities, courier services, or e-commerce platforms) to manipulate victims into revealing confidential information, passwords, OTPs, or transferring money.\n\n");
+                reply.append("**Practical Example:**\n");
+                reply.append("An attacker sends an SMS: *'Dear consumer, your electricity connection will be disconnected tonight at 9:30 PM due to pending bill update. Immediately contact power officer at 98765-XXXXX or pay via http://eb-power-update.com'*. When the victim opens the link, a cloned utility webpage prompts for NetBanking login, card details, and SMS OTPs, which the attacker captures.\n\n");
+                reply.append("**Common Delivery Methods:**\n");
+                reply.append("- **Email Phishing**: Fake invoices, security alerts, or password reset requests leading to cloned login portals.\n");
+                reply.append("- **SMS Phishing (Smishing)**: Urgent SMS claiming electricity disconnection, KYC expiry, or uncollected package delivery with a malicious link.\n");
+                reply.append("- **Voice Phishing (Vishing)**: Impersonators posing as bank officials, customs officers, or police demanding payment or remote device access.\n");
+                reply.append("- **QR Phishing (Quishing)**: Malicious QR codes sent under the guise of 'Scan to receive payment'.\n\n");
+                reply.append("**Essential Phishing Defenses:**\n");
+                reply.append("1. **Inspect URLs Carefully**: Check for domain typosquatting, subtle spelling variations, or unusual subdomains before typing any credentials.\n");
+                reply.append("2. **Never Share OTPs or UPI PINs**: Genuine institutions will never ask for your verification code over call, SMS, or email.\n");
+                reply.append("3. **Verify Links with Prahar**: Paste any suspicious link or message into Prahar's **Scan** tab to analyze risk scores and threat indicators before opening.\n");
+                reply.append("4. **Report Suspicious Messages**: Forward fraudulent SMS to **1909** (Telecom Regulator spam reporting) and report scams to India's National Cyber Crime Helpline (**1930**).");
+                return;
+            }
+
+            // DEFAULT: Concise (1-3 sentences, 20-60 words)
+            reply.append("Phishing is a scam in which attackers pretend to be trusted people or organizations to steal information or money. They often use fake emails, messages, or deceptive websites. Never click unverified links or share personal credentials.");
             return;
         }
 
         // Specific query: What is OTP?
-        if (lower.contains("what is otp") || lower.contains("what is an otp") || lower.contains("define otp") ||
+        if (lower.equals("otp") || lower.equals("otp?") || lower.equals("otp!") ||
+            lower.contains("what is otp") || lower.contains("what is an otp") || lower.contains("define otp") ||
             lower.contains("explain otp") || lower.contains("meaning of otp") || lower.contains("what does otp mean")) {
-            reply.append("### What is an OTP (One-Time Password) & Why It Must Never Be Shared\n\n");
-            reply.append("**Definition & Purpose:**\n");
-            reply.append("An **OTP (One-Time Password)** is a dynamic, time-limited numeric or alphanumeric security code (typically 4 to 6 digits) valid for only a single transaction or authentication attempt.\n\n");
-            reply.append("**How It Works (Two-Factor Authentication - 2FA):**\n");
-            reply.append("- It acts as a second factor of authentication beyond your password or PIN.\n");
-            reply.append("- Generated dynamically via cryptographic algorithms (such as HMAC-based or Time-based OTP), it proves that the person initiating the action is in physical possession of the registered device or SIM card.\n\n");
-            reply.append("**Crucial Security Rules:**\n");
-            reply.append("1. **Never Share Your OTP**: Legitimate banks, telecom operators, police officers, or Prahar will **never** ask for your OTP over phone call, SMS, WhatsApp, or email.\n");
-            reply.append("2. **Read the Full SMS Context**: Always verify the amount and merchant name displayed in the SMS before entering an OTP on any payment portal.\n");
-            reply.append("3. **If You Inadvertently Disclosed an OTP**: Immediately contact your bank to freeze your debit cards and NetBanking, and report the incident on India's National Cyber Crime Helpline (**1930**).");
+            
+            if (detailLevel == ResponseDetailLevel.SHORT) {
+                reply.append("OTP stands for One-Time Password. It is a temporary verification code used to confirm your identity. Never share your OTP with anyone.");
+                return;
+            }
+            if (detailLevel == ResponseDetailLevel.DETAILED) {
+                reply.append("### What is an OTP (One-Time Password) & Why It Must Never Be Shared\n\n");
+                reply.append("**Definition & Purpose:**\n");
+                reply.append("An **OTP (One-Time Password)** is a dynamic, time-limited numeric or alphanumeric security code (typically 4 to 6 digits) valid for only a single transaction or authentication attempt.\n\n");
+                reply.append("**How It Works (Two-Factor Authentication - 2FA):**\n");
+                reply.append("- It acts as a second factor of authentication beyond your password or PIN.\n");
+                reply.append("- Generated dynamically via cryptographic algorithms (such as HMAC-based or Time-based OTP), it proves that the person initiating the action is in physical possession of the registered device or SIM card.\n\n");
+                reply.append("**Crucial Security Rules:**\n");
+                reply.append("1. **Never Share Your OTP**: Legitimate banks, telecom operators, police officers, or Prahar will **never** ask for your OTP over phone call, SMS, WhatsApp, or email.\n");
+                reply.append("2. **Read the Full SMS Context**: Always verify the amount and merchant name displayed in the SMS before entering an OTP on any payment portal.\n");
+                reply.append("3. **If You Inadvertently Disclosed an OTP**: Immediately contact your bank to freeze your debit cards and NetBanking, and report the incident on India's National Cyber Crime Helpline (**1930**).");
+                return;
+            }
+
+            // DEFAULT: Concise (1-3 sentences, 20-60 words)
+            reply.append("OTP stands for One-Time Password. It is a temporary verification code used as a second factor of authentication (2FA) to confirm your identity or approve a single transaction. Never share your OTP with anyone, as banks and legitimate services will never ask for it.");
+            return;
+        }
+
+        // Specific query: What is UPI?
+        if (lower.equals("upi") || lower.equals("upi?") || lower.equals("upi!") ||
+            lower.contains("what is upi") || lower.contains("what is a upi") || lower.contains("define upi") ||
+            lower.contains("explain upi") || lower.contains("meaning of upi") || lower.contains("what does upi mean")) {
+            
+            if (detailLevel == ResponseDetailLevel.SHORT) {
+                reply.append("UPI (Unified Payments Interface) lets you transfer money instantly between bank accounts using a payment app. Entering your UPI PIN is only needed to send money, never to receive it.");
+                return;
+            }
+            if (detailLevel == ResponseDetailLevel.DETAILED) {
+                reply.append("### Unified Payments Interface (UPI) & Security Guide\n\n");
+                reply.append("**What is UPI?**\n");
+                reply.append("UPI (Unified Payments Interface) is an instant real-time payment system developed by the National Payments Corporation of India (NPCI). It facilitates inter-bank peer-to-peer (P2P) and person-to-merchant (P2M) transactions using mobile devices.\n\n");
+                reply.append("**Core Security Principles:**\n");
+                reply.append("1. **Golden Rule**: Entering your UPI PIN **ALWAYS** debits money from your account. You **NEVER** need to enter a UPI PIN to receive money, refunds, or cashback.\n");
+                reply.append("2. **Collect Requests**: Beware of fraudulent collect requests disguised as prize money or refunds. Reject any unknown payment request.\n");
+                reply.append("3. **Dispute Mechanism**: Every UPI transaction generates a 12-digit UTR reference number. If an unauthorized debit occurs, report it immediately in your UPI app and call the 1930 Cyber Helpline.");
+                return;
+            }
+
+            // DEFAULT: Concise (1-3 sentences, 20-60 words)
+            reply.append("UPI (Unified Payments Interface) lets you transfer money instantly between bank accounts using a payment app. Crucially, entering your UPI PIN is only required to send money or approve debits, never to receive funds.");
+            return;
+        }
+
+        // Specific query: What is a firewall?
+        if (lower.equals("firewall") || lower.equals("firewall?") || lower.equals("firewall!") ||
+            lower.contains("what is a firewall") || lower.contains("what is firewall") || lower.contains("define firewall") ||
+            lower.contains("explain firewall") || lower.contains("meaning of firewall")) {
+            
+            if (detailLevel == ResponseDetailLevel.SHORT) {
+                reply.append("A firewall is a network security system that monitors and controls incoming and outgoing network traffic based on predetermined security rules, blocking unauthorized access.");
+                return;
+            }
+            if (detailLevel == ResponseDetailLevel.DETAILED) {
+                reply.append("### Understanding Firewalls & Network Defense\n\n");
+                reply.append("**What is a Firewall?**\n");
+                reply.append("A firewall is a foundational network security barrier that inspects and filters incoming and outgoing network traffic based on established security policies.\n\n");
+                reply.append("**Types of Firewalls:**\n");
+                reply.append("1. **Packet-Filtering Firewalls**: Inspect individual packets against criteria like source/destination IP and port numbers.\n");
+                reply.append("2. **Stateful Inspection Firewalls**: Track the state of active network connections to verify legitimate sessions.\n");
+                reply.append("3. **Next-Generation Firewalls (NGFW)**: Incorporate deep packet inspection, application awareness, and intrusion prevention systems (IPS).\n\n");
+                reply.append("**Key Role in Cybersecurity:**\n");
+                reply.append("Firewalls shield private internal networks from external threats, malware propagation, and unauthorized scanning across the internet.");
+                return;
+            }
+
+            // DEFAULT: Concise (1-3 sentences, 20-60 words)
+            reply.append("A firewall is a network security system that monitors and filters incoming and outgoing network traffic based on predetermined security rules. It acts as a protective barrier between a trusted internal network and untrusted external networks like the internet to block unauthorized access.");
             return;
         }
 
@@ -1589,7 +1877,13 @@ public class ChatService {
         boolean isEducationalQuery = lower.contains("what is") || lower.contains("what are") ||
                 lower.contains("define") || lower.contains("explain") || lower.contains("meaning of") ||
                 lower.contains("does https") || lower.contains("how does") || lower.contains("protect my website") ||
-                lower.contains("session hijack") || lower.contains("cookie");
+                lower.contains("session hijack") || lower.contains("cookie") ||
+                lower.contains("ways to identify") || lower.contains("how to identify") || lower.contains("how can i identify") ||
+                lower.contains("how to recognize") || lower.contains("how do i recognize") ||
+                lower.contains("how do we detect") || lower.contains("how to detect") ||
+                lower.contains("spot fake") || lower.contains("detect fake") || lower.contains("fake website") ||
+                lower.equals("phishing") || lower.equals("otp") || lower.equals("upi") || lower.equals("firewall") ||
+                lower.equals("phishing?") || lower.equals("otp?") || lower.equals("upi?") || lower.equals("firewall?");
 
         switch (intent) {
             case FAKE_SHOPPING_SCAM:

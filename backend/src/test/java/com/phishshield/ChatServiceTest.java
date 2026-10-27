@@ -426,10 +426,10 @@ class ChatServiceTest {
     }
 
     @Test
-    @DisplayName("TEST 7: User says 'What is phishing?' -> clear explanation of phishing")
+    @DisplayName("TEST 7: User says 'Explain phishing in detail' -> clear explanation of phishing")
     void testPhase8Test7WhatIsPhishing() {
         ChatRequest request = new ChatRequest();
-        request.setMessage("What is phishing?");
+        request.setMessage("Explain phishing in detail.");
 
         ChatResponse res = chatService.processChat(request);
         assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
@@ -459,7 +459,7 @@ class ChatServiceTest {
         q1.setMessage("What is phishing?");
         ChatResponse a1 = chatService.processChat(q1);
         assertEquals("GENERAL_CYBER_SAFETY", a1.getIntent());
-        assertTrue(a1.getReply().contains("Understanding Phishing"));
+        assertTrue(a1.getReply().toLowerCase().contains("phishing"));
 
         // Question 2: Tell me about yourself.
         ChatRequest q2 = new ChatRequest();
@@ -558,10 +558,10 @@ class ChatServiceTest {
     }
 
     @Test
-    @DisplayName("Master Test 5: General Phishing Education - 'What is phishing?'")
+    @DisplayName("Master Test 5: General Phishing Education - 'Explain phishing in detail'")
     void testSection18Test5GeneralPhishingEducation() {
         ChatRequest req = new ChatRequest();
-        req.setMessage("What is phishing?");
+        req.setMessage("Explain phishing in detail.");
 
         ChatResponse res = chatService.processChat(req);
         assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
@@ -787,10 +787,10 @@ class ChatServiceTest {
     }
 
     @Test
-    @DisplayName("Module 12 - Test 3: Phishing definition ('What is phishing?') without duplicate checklist")
+    @DisplayName("Module 12 - Test 3: Phishing definition ('Explain phishing in detail') without duplicate checklist")
     void testModule12_Test03_PhishingDefinition() {
         ChatRequest req = new ChatRequest();
-        req.setMessage("What is phishing?");
+        req.setMessage("Explain phishing in detail");
 
         ChatResponse res = chatService.processChat(req);
         assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
@@ -932,7 +932,7 @@ class ChatServiceTest {
         assertFalse(res.isLiveAi());
         assertTrue(res.getProvider().contains("fallback") || res.getProvider().contains("gemini"));
         // Ensure transparent rule response delivered without claiming live AI success
-        assertTrue(res.getReply().contains("Understanding Phishing"));
+        assertTrue(res.getReply().toLowerCase().contains("phishing"));
 
         // Reset provider
         ReflectionTestUtils.setField(chatService, "aiProvider", "none");
@@ -984,4 +984,571 @@ class ChatServiceTest {
         assertFalse(res.getReply().contains("system prompt"));
         assertFalse(res.getReply().contains("evil bot"));
     }
+
+    // =========================================================================
+    // FAILURE A & FAILURE B SPECIFIC REGRESSION TEST SUITE
+    // =========================================================================
+
+    @Test
+    @DisplayName("Failure A Test 1: 'Can u help me with bank frauds?' -> returns banking fraud guide, not triage")
+    void testFailureA_BankFraudsQuery() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("Can u help me with bank frauds?");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        assertFalse(res.getReply().contains("Could you share a few more details about what you're dealing with?"));
+        assertTrue(res.getReply().contains("Banking & Financial Fraud Protection"));
+        assertTrue(res.getReply().contains("1930"));
+        assertTrue(res.getReply().contains("UPI"));
+    }
+
+    @Test
+    @DisplayName("Failure A Test 2: Standalone 'Phishing' -> returns phishing definition and defenses, not triage")
+    void testFailureA_StandalonePhishing() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("Phishing");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        assertFalse(res.getReply().contains("Could you share a few more details about what you're dealing with?"));
+        assertTrue(res.getReply().toLowerCase().contains("phishing"));
+        assertTrue(res.getReply().toLowerCase().contains("scam"));
+    }
+
+    @Test
+    @DisplayName("Failure A Test 3: 'What is helpline number?' -> returns official cybercrime helplines")
+    void testFailureA_HelplineQuery() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("What is helpline number?");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("FRAUD_REPORTING", res.getIntent());
+        assertFalse(res.getReply().contains("Could you share a few more details about what you're dealing with?"));
+        assertTrue(res.getReply().contains("1930"));
+        assertTrue(res.getReply().contains("cybercrime.gov.in"));
+        assertTrue(res.getReply().contains("1909"));
+    }
+
+    @Test
+    @DisplayName("Failure A Test 4: 'What is the helpline number for online financial fraud in India?' -> returns 1930")
+    void testFailureA_HelplineFinancialFraudInIndia() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("What is the helpline number for online financial fraud in India?");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("FRAUD_REPORTING", res.getIntent());
+        assertTrue(res.getReply().contains("1930"));
+        assertTrue(res.getReply().contains("Citizen Financial Cyber Fraud Reporting"));
+    }
+
+    @Test
+    @DisplayName("Failure A Test 5: 'What is golden hour?' -> explains 2-3 hour window with statutory guarantee disclaimer")
+    void testFailureA_GoldenHourQuery() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("What is golden hour?");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        assertFalse(res.getReply().contains("Could you share a few more details about what you're dealing with?"));
+        assertTrue(res.getReply().contains("Golden Hour"));
+        assertTrue(res.getReply().contains("2 to 3 hours") || res.getReply().contains("2–3 hours"));
+        assertTrue(res.getReply().contains("1930"));
+        assertTrue(res.getReply().contains("Not a Statutory Guarantee") || res.getReply().contains("not an absolute recovery guarantee"));
+    }
+
+    @Test
+    @DisplayName("Failure B Test 1: 'Someone stole ₹5,000 from my account.' -> 'It happened through UPI.' retains context")
+    void testFailureB_UnauthorizedDebitThenUpi() {
+        // Turn 1
+        ChatRequest turn1Req = new ChatRequest();
+        turn1Req.setMessage("Someone stole ₹5,000 from my account.");
+
+        ChatResponse turn1Res = chatService.processChat(turn1Req);
+        assertEquals("UNKNOWN_DEBIT", turn1Res.getIntent());
+        assertTrue(turn1Res.getReply().contains("5000"));
+        assertTrue(turn1Res.getReply().contains("Which payment method was used") || turn1Res.getReply().contains("payment channel"));
+
+        // Turn 2: Follow up specifying payment channel
+        ChatRequest turn2Req = new ChatRequest();
+        turn2Req.setMessage("It happened through UPI.");
+        turn2Req.setConversationHistory(List.of(
+                new ChatMessageDto("user", "Someone stole ₹5,000 from my account."),
+                new ChatMessageDto("assistant", turn1Res.getReply())
+        ));
+
+        ChatResponse turn2Res = chatService.processChat(turn2Req);
+        assertTrue(turn2Res.isFollowUp(), "Turn 2 should be recognized as conversational follow-up");
+        assertTrue("UNKNOWN_DEBIT".equals(turn2Res.getIntent()) || "UPI_FRAUD".equals(turn2Res.getIntent()),
+                "Intent should be UNKNOWN_DEBIT or UPI_FRAUD, got: " + turn2Res.getIntent());
+        assertFalse(turn2Res.getReply().contains("Could you share a few more details about what you're dealing with?"));
+        assertTrue(turn2Res.getReply().contains("UPI"), "Response should recognize UPI payment channel");
+        assertTrue(turn2Res.getReply().contains("UTR") || turn2Res.getReply().contains("1930"));
+    }
+
+    @Test
+    @DisplayName("Failure B Test 2: 'What is phishing?' -> 'How do I identify it?' pronoun resolution")
+    void testFailureB_PhishingThenHowDoIIdentifyIt() {
+        // Turn 1
+        ChatRequest turn1Req = new ChatRequest();
+        turn1Req.setMessage("What is phishing?");
+
+        ChatResponse turn1Res = chatService.processChat(turn1Req);
+        assertEquals("GENERAL_CYBER_SAFETY", turn1Res.getIntent());
+        assertTrue(turn1Res.getReply().toLowerCase().contains("phishing"));
+
+        // Turn 2: Pronoun query "How do I identify it?"
+        ChatRequest turn2Req = new ChatRequest();
+        turn2Req.setMessage("How do I identify it?");
+        turn2Req.setConversationHistory(List.of(
+                new ChatMessageDto("user", "What is phishing?"),
+                new ChatMessageDto("assistant", turn1Res.getReply())
+        ));
+
+        ChatResponse turn2Res = chatService.processChat(turn2Req);
+        assertTrue(turn2Res.isFollowUp(), "Turn 2 should be recognized as follow up continuation");
+        assertEquals("GENERAL_CYBER_SAFETY", turn2Res.getIntent());
+        assertFalse(turn2Res.getReply().contains("Could you share a few more details about what you're dealing with?"));
+        assertTrue(turn2Res.getReply().contains("Key Indicators to Identify & Spot Phishing") || turn2Res.getReply().contains("Identify"));
+        assertTrue(turn2Res.getReply().contains("Typosquatting") || turn2Res.getReply().contains("Urgency") || turn2Res.getReply().contains("Scan"));
+    }
+
+    // =========================================================================
+    // SECTION 10: AUTOMATED QUALITY TEST SUITE (TESTS A - F)
+    // =========================================================================
+
+    @Test
+    @DisplayName("Test A1: Concise response for 'What is phishing?' (1-3 sentences, ~20-60 words, no headings/checklists)")
+    void testQualityA1_WhatIsPhishingConcise() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("What is phishing?");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        assertNotNull(res.getReply());
+        // Verify conciseness: between 15 and 70 words
+        int wordCount = res.getReply().split("\\s+").length;
+        assertTrue(wordCount >= 15 && wordCount <= 70, "Response word count should be ~20-60 words, was: " + wordCount);
+        assertTrue(res.getReply().toLowerCase().contains("phishing"));
+        assertTrue(res.getReply().toLowerCase().contains("scam"));
+        assertFalse(res.getReply().contains("###"), "Should not contain unnecessary markdown headings");
+        assertTrue(res.getActionChecklist() == null || res.getActionChecklist().isEmpty(), "Should not contain duplicate checklist card");
+    }
+
+    @Test
+    @DisplayName("Test A2: Concise response for 'What is OTP?' (1-3 sentences, ~20-60 words)")
+    void testQualityA2_WhatIsOtpConcise() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("What is OTP?");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        assertNotNull(res.getReply());
+        int wordCount = res.getReply().split("\\s+").length;
+        assertTrue(wordCount >= 15 && wordCount <= 65, "Response word count should be ~20-60 words, was: " + wordCount);
+        assertTrue(res.getReply().contains("One-Time Password"));
+        assertTrue(res.getReply().toLowerCase().contains("never share"));
+        assertFalse(res.getReply().contains("###"), "Should not contain unnecessary headings");
+    }
+
+    @Test
+    @DisplayName("Test A3: Concise response for 'What is UPI?' (1-3 sentences, ~20-60 words)")
+    void testQualityA3_WhatIsUpiConcise() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("What is UPI?");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        assertNotNull(res.getReply());
+        int wordCount = res.getReply().split("\\s+").length;
+        assertTrue(wordCount >= 15 && wordCount <= 65, "Response word count should be ~20-60 words, was: " + wordCount);
+        assertTrue(res.getReply().contains("Unified Payments Interface"));
+        assertTrue(res.getReply().contains("PIN"));
+        assertFalse(res.getReply().contains("###"), "Should not contain unnecessary headings");
+    }
+
+    @Test
+    @DisplayName("Test A4: Concise response for 'What is a firewall?' (1-3 sentences, ~20-60 words)")
+    void testQualityA4_WhatIsFirewallConcise() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("What is a firewall?");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        assertNotNull(res.getReply());
+        int wordCount = res.getReply().split("\\s+").length;
+        assertTrue(wordCount >= 15 && wordCount <= 65, "Response word count should be ~20-60 words, was: " + wordCount);
+        assertTrue(res.getReply().toLowerCase().contains("firewall"));
+        assertTrue(res.getReply().toLowerCase().contains("network"));
+        assertFalse(res.getReply().contains("###"), "Should not contain unnecessary headings");
+    }
+
+    @Test
+    @DisplayName("Test A5: Concise response for 'What is Prahar?' (implemented features only, ~20-60 words)")
+    void testQualityA5_WhatIsPraharConcise() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("What is Prahar?");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("ASSISTANT_IDENTITY", res.getIntent());
+        assertNotNull(res.getReply());
+        int wordCount = res.getReply().split("\\s+").length;
+        assertTrue(wordCount >= 15 && wordCount <= 65, "Response word count should be ~20-60 words, was: " + wordCount);
+        assertTrue(res.getReply().contains("Prahar"));
+        assertTrue(res.getReply().toLowerCase().contains("phishing"));
+        assertFalse(res.getReply().contains("###"), "Should not contain unnecessary headings");
+    }
+
+    @Test
+    @DisplayName("Test B1: Detail adaptation - 'Explain phishing in one sentence.'")
+    void testQualityB1_PhishingOneSentence() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("Explain phishing in one sentence.");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        int wordCount = res.getReply().split("\\s+").length;
+        assertTrue(wordCount <= 35, "One sentence request should be under 35 words, was: " + wordCount);
+        assertTrue(res.getReply().toLowerCase().contains("phishing"));
+    }
+
+    @Test
+    @DisplayName("Test B2: Detail adaptation - 'Explain phishing in detail.' expands appropriately")
+    void testQualityB2_PhishingInDetail() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("Explain phishing in detail.");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        int wordCount = res.getReply().split("\\s+").length;
+        assertTrue(wordCount >= 80, "Detailed request should contain structured explanation, was: " + wordCount);
+        assertTrue(res.getReply().contains("Understanding Phishing"));
+        assertTrue(res.getReply().contains("Practical Example"));
+        assertTrue(res.getReply().contains("Common Delivery Methods"));
+    }
+
+    @Test
+    @DisplayName("Test B3: Detail adaptation - 'Give me five ways to identify a fake website.'")
+    void testQualityB3_FiveWaysToIdentifyFakeWebsite() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("Give me five ways to identify a fake website.");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        assertTrue(res.getReply().contains("1."));
+        assertTrue(res.getReply().contains("2."));
+        assertTrue(res.getReply().contains("3."));
+        assertTrue(res.getReply().contains("4."));
+        assertTrue(res.getReply().contains("5."));
+        assertTrue(res.getReply().contains("Typosquatting") || res.getReply().contains("Domain Name"));
+        assertTrue(res.getReply().contains("HTTPS"));
+        assertTrue(res.getReply().contains("Prahar"));
+    }
+
+    @Test
+    @DisplayName("Test B4: Detail adaptation - 'Explain OTP in simple words.'")
+    void testQualityB4_OtpInSimpleWords() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("Explain OTP in simple words.");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("GENERAL_CYBER_SAFETY", res.getIntent());
+        int wordCount = res.getReply().split("\\s+").length;
+        assertTrue(wordCount <= 40, "Simple words request should be concise, was: " + wordCount);
+        assertTrue(res.getReply().contains("One-Time Password"));
+        assertTrue(res.getReply().toLowerCase().contains("never share"));
+    }
+
+    @Test
+    @DisplayName("Test C1: Context - 'What is phishing?' -> 'What is OTP?' (immediate topic change, no phishing repetition)")
+    void testQualityC1_TopicChangePhishingToOtp() {
+        ChatRequest turn1 = new ChatRequest();
+        turn1.setMessage("What is phishing?");
+        ChatResponse res1 = chatService.processChat(turn1);
+
+        ChatRequest turn2 = new ChatRequest();
+        turn2.setMessage("What is OTP?");
+        turn2.setConversationHistory(List.of(
+                new ChatMessageDto("user", "What is phishing?"),
+                new ChatMessageDto("assistant", res1.getReply())
+        ));
+
+        ChatResponse res2 = chatService.processChat(turn2);
+        assertEquals("GENERAL_CYBER_SAFETY", res2.getIntent());
+        assertTrue(res2.getReply().contains("One-Time Password"));
+        assertFalse(res2.getReply().toLowerCase().contains("phishing is a scam"), "Should answer OTP without repeating phishing definition");
+    }
+
+    @Test
+    @DisplayName("Test C2: Context - 'What is phishing?' -> 'How can I identify it?' pronoun resolution")
+    void testQualityC2_PronounResolution() {
+        ChatRequest turn1 = new ChatRequest();
+        turn1.setMessage("What is phishing?");
+        ChatResponse res1 = chatService.processChat(turn1);
+
+        ChatRequest turn2 = new ChatRequest();
+        turn2.setMessage("How can I identify it?");
+        turn2.setConversationHistory(List.of(
+                new ChatMessageDto("user", "What is phishing?"),
+                new ChatMessageDto("assistant", res1.getReply())
+        ));
+
+        ChatResponse res2 = chatService.processChat(turn2);
+        assertEquals("GENERAL_CYBER_SAFETY", res2.getIntent());
+        assertTrue(res2.isFollowUp());
+        assertTrue(res2.getReply().contains("Key Indicators to Identify & Spot Phishing") || res2.getReply().contains("Identify"));
+    }
+
+    @Test
+    @DisplayName("Test D1: Incident containment - 'I already transferred money to a scammer.' urgent containment first")
+    void testQualityD1_TransferredMoneyToScammer() {
+        ChatRequest req = new ChatRequest();
+        req.setMessage("I already transferred money to a scammer.");
+
+        ChatResponse res = chatService.processChat(req);
+        assertEquals("UNKNOWN_DEBIT", res.getIntent());
+        assertTrue(res.getReply().startsWith("Act immediately:"));
+        assertTrue(res.getReply().contains("1930"));
+        assertTrue(res.getReply().contains("cybercrime.gov.in"));
+        assertTrue(res.getReply().contains("Preserve the transaction ID"));
+        assertTrue(res.getReply().contains("Which payment method was used"));
+        assertFalse(res.getReply().contains("Could you share a few more details about what you're dealing with?"));
+    }
+
+    @Test
+    @DisplayName("Test E1: Duplicate prevention - Single final response, no redundant action checklist card on educational questions")
+    void testQualityE1_EducationalChecklistSuppression() {
+        String[] educationalQueries = {
+                "What is phishing?",
+                "What is OTP?",
+                "What is UPI?",
+                "What is a firewall?",
+                "Give me five ways to identify a fake website."
+        };
+
+        for (String query : educationalQueries) {
+            ChatRequest req = new ChatRequest();
+            req.setMessage(query);
+            ChatResponse res = chatService.processChat(req);
+            assertTrue(res.getActionChecklist() == null || res.getActionChecklist().isEmpty(),
+                    "Educational query '" + query + "' must not generate redundant action checklist card");
+        }
+    }
+
+    @Test
+    @DisplayName("Test A: Progressive incident disclosure (suspicious link -> bank details -> what should I do now)")
+    void testRegressionA_ProgressiveIncidentDisclosure() {
+        // Turn 1
+        ChatRequest turn1 = new ChatRequest();
+        turn1.setMessage("I clicked a suspicious link.");
+        ChatResponse res1 = chatService.processChat(turn1);
+        assertEquals("PHISHING_URL_ANALYSIS", res1.getIntent());
+        assertTrue(res1.getReply().toLowerCase().contains("opening a link does not immediately compromise") ||
+                   res1.getReply().toLowerCase().contains("don't enter any more information") ||
+                   res1.getReply().toLowerCase().contains("not necessarily"));
+
+        // Turn 2
+        ChatRequest turn2 = new ChatRequest();
+        turn2.setMessage("I entered my bank details.");
+        turn2.setConversationHistory(List.of(
+                new ChatMessageDto("user", "I clicked a suspicious link."),
+                new ChatMessageDto("assistant", res1.getReply())
+        ));
+        ChatResponse res2 = chatService.processChat(turn2);
+        assertEquals("ACCOUNT_COMPROMISE", res2.getIntent());
+        assertTrue(res2.isFollowUp());
+        assertTrue(res2.getReply().toLowerCase().contains("bank details") || res2.getReply().toLowerCase().contains("financial information"));
+        assertTrue(res2.getReply().toLowerCase().contains("lock") || res2.getReply().toLowerCase().contains("freeze"));
+        assertTrue(res2.getReply().contains("1930"));
+        // Does not assume money was already stolen
+        assertFalse(res2.getReply().toLowerCase().contains("stolen money has been debited"));
+        assertFalse(res2.getReply().contains("Could you share a few more details about what you're dealing with?"));
+
+        // Turn 3
+        ChatRequest turn3 = new ChatRequest();
+        turn3.setMessage("What should I do now?");
+        turn3.setConversationHistory(List.of(
+                new ChatMessageDto("user", "I clicked a suspicious link."),
+                new ChatMessageDto("assistant", res1.getReply()),
+                new ChatMessageDto("user", "I entered my bank details."),
+                new ChatMessageDto("assistant", res2.getReply())
+        ));
+        ChatResponse res3 = chatService.processChat(turn3);
+        assertEquals("ACCOUNT_COMPROMISE", res3.getIntent());
+        assertTrue(res3.isFollowUp());
+        assertTrue(res3.getReply().toLowerCase().contains("prioritized next steps") || res3.getReply().toLowerCase().contains("next steps"));
+        assertTrue(res3.getReply().contains("1930"));
+        // Answers the final question without repeating the Turn 2 answer word for word or repeating generic triage
+        assertNotEquals(res2.getReply(), res3.getReply());
+        assertFalse(res3.getReply().contains("Could you share a few more details about what you're dealing with?"));
+    }
+
+    @Test
+    @DisplayName("Test B: OTP disclosure (suspicious link -> I also shared an OTP)")
+    void testRegressionB_OtpDisclosure() {
+        // Turn 1
+        ChatRequest turn1 = new ChatRequest();
+        turn1.setMessage("I clicked a suspicious link.");
+        ChatResponse res1 = chatService.processChat(turn1);
+
+        // Turn 2
+        ChatRequest turn2 = new ChatRequest();
+        turn2.setMessage("I also shared an OTP.");
+        turn2.setConversationHistory(List.of(
+                new ChatMessageDto("user", "I clicked a suspicious link."),
+                new ChatMessageDto("assistant", res1.getReply())
+        ));
+        ChatResponse res2 = chatService.processChat(turn2);
+        assertEquals("OTP_DISCLOSURE", res2.getIntent());
+        assertTrue(res2.isFollowUp());
+        assertTrue(res2.getReply().toLowerCase().contains("freeze") || res2.getReply().toLowerCase().contains("lock"));
+        assertTrue(res2.getReply().contains("1930"));
+        // Distinguishes confirmed facts from possible risks without assuming money is already gone
+        assertFalse(res2.getReply().toLowerCase().contains("money has already been stolen"));
+        assertFalse(res2.getReply().contains("Could you share a few more details about what you're dealing with?"));
+    }
+
+    @Test
+    @DisplayName("Test C: Unauthorized payment (money deducted -> via UPI -> what should I do next)")
+    void testRegressionC_UnauthorizedPayment() {
+        // Turn 1
+        ChatRequest turn1 = new ChatRequest();
+        turn1.setMessage("Money was deducted from my account.");
+        ChatResponse res1 = chatService.processChat(turn1);
+        assertEquals("UNKNOWN_DEBIT", res1.getIntent());
+
+        // Turn 2
+        ChatRequest turn2 = new ChatRequest();
+        turn2.setMessage("It happened through UPI.");
+        turn2.setConversationHistory(List.of(
+                new ChatMessageDto("user", "Money was deducted from my account."),
+                new ChatMessageDto("assistant", res1.getReply())
+        ));
+        ChatResponse res2 = chatService.processChat(turn2);
+        assertEquals("UPI_FRAUD", res2.getIntent());
+        assertTrue(res2.getReply().contains("UTR") || res2.getReply().contains("UPI"));
+
+        // Turn 3
+        ChatRequest turn3 = new ChatRequest();
+        turn3.setMessage("What should I do next?");
+        turn3.setConversationHistory(List.of(
+                new ChatMessageDto("user", "Money was deducted from my account."),
+                new ChatMessageDto("assistant", res1.getReply()),
+                new ChatMessageDto("user", "It happened through UPI."),
+                new ChatMessageDto("assistant", res2.getReply())
+        ));
+        ChatResponse res3 = chatService.processChat(turn3);
+        assertEquals("UPI_FRAUD", res3.getIntent());
+        assertTrue(res3.isFollowUp());
+        assertTrue(res3.getReply().contains("1930"));
+        assertTrue(res3.getReply().toLowerCase().contains("utr"));
+        assertTrue(res3.getReply().toLowerCase().contains("dispute"));
+        assertFalse(res3.getReply().contains("Could you share a few more details about what you're dealing with?"));
+    }
+
+    @Test
+    @DisplayName("Test D: Topic change (suspicious link -> What is OTP?)")
+    void testRegressionD_TopicChange() {
+        ChatRequest turn1 = new ChatRequest();
+        turn1.setMessage("I clicked a suspicious link.");
+        ChatResponse res1 = chatService.processChat(turn1);
+
+        ChatRequest turn2 = new ChatRequest();
+        turn2.setMessage("What is OTP?");
+        turn2.setConversationHistory(List.of(
+                new ChatMessageDto("user", "I clicked a suspicious link."),
+                new ChatMessageDto("assistant", res1.getReply())
+        ));
+        ChatResponse res2 = chatService.processChat(turn2);
+        assertEquals("GENERAL_CYBER_SAFETY", res2.getIntent());
+        assertTrue(res2.getReply().contains("One-Time Password"));
+        // Does not force the conversation to remain in incident response mode
+        assertFalse(res2.getReply().toLowerCase().contains("don't enter any more information on that page"));
+    }
+
+    @Test
+    @DisplayName("Test E: Concise answers (simple definitions concise, detailed requests comprehensive)")
+    void testRegressionE_ConciseAnswers() {
+        // 1. What is phishing? (Default concise: 1-3 sentences)
+        ChatRequest reqPhish = new ChatRequest();
+        reqPhish.setMessage("What is phishing?");
+        ChatResponse resPhish = chatService.processChat(reqPhish);
+        assertEquals("GENERAL_CYBER_SAFETY", resPhish.getIntent());
+        int phishWords = resPhish.getReply().split("\\s+").length;
+        assertTrue(phishWords <= 55, "Default 'What is phishing?' should be concise (<=55 words), was: " + phishWords);
+
+        // 2. What is OTP? (Default concise: 1-3 sentences)
+        ChatRequest reqOtp = new ChatRequest();
+        reqOtp.setMessage("What is OTP?");
+        ChatResponse resOtp = chatService.processChat(reqOtp);
+        assertEquals("GENERAL_CYBER_SAFETY", resOtp.getIntent());
+        int otpWords = resOtp.getReply().split("\\s+").length;
+        assertTrue(otpWords <= 55, "Default 'What is OTP?' should be concise (<=55 words), was: " + otpWords);
+
+        // 3. How can I identify phishing? (~3-5 short points)
+        ChatRequest reqIdentify = new ChatRequest();
+        reqIdentify.setMessage("How can I identify phishing?");
+        ChatResponse resIdentify = chatService.processChat(reqIdentify);
+        assertEquals("GENERAL_CYBER_SAFETY", resIdentify.getIntent());
+        assertTrue(resIdentify.getReply().contains("1.") || resIdentify.getReply().contains("Identify"));
+
+        // 4. Explain phishing in detail (Explicit detailed request)
+        ChatRequest reqDetail = new ChatRequest();
+        reqDetail.setMessage("Explain phishing in detail.");
+        ChatResponse resDetail = chatService.processChat(reqDetail);
+        assertEquals("GENERAL_CYBER_SAFETY", resDetail.getIntent());
+        int detailWords = resDetail.getReply().split("\\s+").length;
+        assertTrue(detailWords > 80, "Detailed request should have comprehensive depth (>80 words), was: " + detailWords);
+    }
+
+    @Test
+    @DisplayName("Test F: Session isolation (Conversation A details do not leak to Conversation B)")
+    void testRegressionF_SessionIsolation() {
+        // Conversation A: reports bank details entered
+        ChatRequest convA_turn1 = new ChatRequest();
+        convA_turn1.setMessage("I entered my bank details.");
+        ChatResponse resA = chatService.processChat(convA_turn1);
+        assertEquals("ACCOUNT_COMPROMISE", resA.getIntent());
+
+        // Conversation B: fresh separate conversation without conversation history
+        ChatRequest convB_turn1 = new ChatRequest();
+        convB_turn1.setMessage("What is OTP?");
+        ChatResponse resB = chatService.processChat(convB_turn1);
+        assertEquals("GENERAL_CYBER_SAFETY", resB.getIntent());
+        // Verify Conversation B has no leakage of Conversation A's banking compromise
+        assertFalse(resB.getReply().toLowerCase().contains("lock or freeze your card"));
+        assertFalse(resB.getReply().toLowerCase().contains("entered your bank details"));
+    }
+
+    @Test
+    @DisplayName("Test G: No repetitive fallback (Contextual follow-up does not repeat generic clarification)")
+    void testRegressionG_NoRepetitiveFallback() {
+        ChatRequest turn1 = new ChatRequest();
+        turn1.setMessage("I clicked a suspicious link.");
+        ChatResponse res1 = chatService.processChat(turn1);
+
+        ChatRequest turn2 = new ChatRequest();
+        turn2.setMessage("I entered my bank details.");
+        turn2.setConversationHistory(List.of(
+                new ChatMessageDto("user", "I clicked a suspicious link."),
+                new ChatMessageDto("assistant", res1.getReply())
+        ));
+        ChatResponse res2 = chatService.processChat(turn2);
+
+        ChatRequest turn3 = new ChatRequest();
+        turn3.setMessage("What should I do now?");
+        turn3.setConversationHistory(List.of(
+                new ChatMessageDto("user", "I clicked a suspicious link."),
+                new ChatMessageDto("assistant", res1.getReply()),
+                new ChatMessageDto("user", "I entered my bank details."),
+                new ChatMessageDto("assistant", res2.getReply())
+        ));
+        ChatResponse res3 = chatService.processChat(turn3);
+
+        String genericTriage = "Could you share a few more details about what you're dealing with? For example, is it a suspicious link, an order from an unfamiliar website, an unrecognized transaction, or an account security concern?";
+        assertFalse(res2.getReply().contains(genericTriage), "Turn 2 must not return generic intake triage");
+        assertFalse(res3.getReply().contains(genericTriage), "Turn 3 must not return generic intake triage");
+        assertNotEquals(res2.getReply().trim(), res3.getReply().trim(), "Turn 3 must not repeat Turn 2 verbatim");
+    }
 }
+

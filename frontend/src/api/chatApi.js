@@ -57,10 +57,25 @@ export const chatApi = {
       );
     } catch (err) {
       const durationMs = Date.now() - startTime;
+      let statusCode = err.response?.status || null;
+
+      // AUTOMATIC GRACEFUL DEGRADATION:
+      // If the backend is not yet deployed (404) or network is unreachable,
+      // seamlessly return verified deterministic offline safety guidance so the user is never blocked.
+      if (!err.response || statusCode === 404) {
+        console.warn('[Prahar Chat] Backend not yet reachable or returned 404; activating offline emergency guidance.', {
+          status: statusCode,
+          endpoint: '/api/chat',
+          durationMs
+        });
+        const failureReason = statusCode === 404
+          ? 'Backend endpoint not yet deployed. Showing verified offline safety rules.'
+          : 'Backend server currently unreachable. Showing verified offline safety rules.';
+        return this.getOfflineEmergencyGuidance(payload, { message: failureReason, statusCode });
+      }
 
       let errorType = 'HTTP_ERROR';
       let userFriendlyMessage = 'Failed to communicate with Prahar Assistant.';
-      let statusCode = err.response?.status || null;
 
       if (err instanceof ChatServiceError) {
         throw err;
@@ -69,12 +84,6 @@ export const chatApi = {
       if (err.code === 'ECONNABORTED' || err.message?.toLowerCase().includes('timeout')) {
         errorType = 'TIMEOUT';
         userFriendlyMessage = 'The request to Prahar Assistant timed out (10s). The server or AI provider may be overloaded.';
-      } else if (!err.response) {
-        errorType = 'BACKEND_UNAVAILABLE';
-        userFriendlyMessage = 'Prahar backend server is currently unreachable. Please check your network connection or verify that the backend API is online.';
-      } else if (statusCode === 404) {
-        errorType = 'ENDPOINT_NOT_FOUND';
-        userFriendlyMessage = 'Chatbot endpoint not found (HTTP 404). Verify that VITE_API_URL is configured in your deployment settings and points to the live backend API ending in /api.';
       } else if (statusCode === 401 || statusCode === 403) {
         errorType = 'AUTH_ERROR';
         userFriendlyMessage = 'Authorization check failed for this chat session.';
@@ -127,11 +136,8 @@ export const chatApi = {
 
   /**
    * Pre-computed Offline Safety Guidance
-   * ONLY invoked when explicitly requested by user or when offline mode is selected.
+   * Invoked for seamless offline fallback or when explicitly requested.
    * Explicitly labeled as offline emergency advice.
-   */
-  /**
-   * List all persistent conversations for the authenticated user
    */
   async listConversations(page = 0, size = 15) {
     const response = await client.get('/chat/conversations', {
@@ -140,17 +146,11 @@ export const chatApi = {
     return response.data?.data;
   },
 
-  /**
-   * Create a new conversation thread
-   */
   async createConversation(title) {
     const response = await client.post('/chat/conversations', { title });
     return response.data?.data;
   },
 
-  /**
-   * Get conversation details with paginated messages
-   */
   async getConversation(id, page = 0, size = 30) {
     const response = await client.get(`/chat/conversations/${id}`, {
       params: { page, size }
@@ -158,9 +158,6 @@ export const chatApi = {
     return response.data?.data;
   },
 
-  /**
-   * Delete a conversation thread
-   */
   async deleteConversation(id) {
     const response = await client.delete(`/chat/conversations/${id}`);
     return response.data;
@@ -176,6 +173,20 @@ export const chatApi = {
     let followUpSuggestions = [];
     let actionChecklist = [];
 
+    // Phishing incident containment
+    if (text.includes('phish') || text.includes('fake link') || text.includes('scam website') || text.includes('suspicious link') || text.includes('sus link') || text.includes('attack')) {
+      intent = 'PHISHING_INCIDENT';
+      reply = `### [Offline Guidance] Phishing Incident Containment Protocol\n\nIf you encountered or suspect you are under a **phishing attack**:\n\n1. **Do Not Enter Credentials:** If the webpage asks for NetBanking passwords, UPI PINs, Aadhaar details, or OTPs, close the page immediately.\n2. **Disconnect / Change Passwords:** If you already entered login credentials, immediately change your password from a clean, secure device and terminate active sessions.\n3. **Bank Account Safeguard:** If debit/credit card or banking details were provided, call your bank's 24x7 emergency helpline immediately or freeze digital access via your mobile banking app.\n4. **Report to Indian Cyber Helpline (1930):** Immediately call **1930** (National Cyber Crime Reporting Helpline) or log a complaint at [cybercrime.gov.in](https://cybercrime.gov.in/).\n5. **Scan with Prahar:** Use the **Link Scanner** on Prahar's Home tab to inspect lexical features and brand impersonation indicators.`;
+      followUpSuggestions = ['What if I entered my OTP?', 'How do I report on cybercrime.gov.in?', 'Dial 1930 Helpline'];
+      actionChecklist = [
+        'Close suspicious page immediately',
+        'Change compromised passwords from a safe device',
+        'Contact bank helpline or freeze cards if banking info entered',
+        'Report to 1930 National Cyber Helpline or cybercrime.gov.in'
+      ];
+      return buildOfflineResponse(reply, intent, followUpSuggestions, actionChecklist, failureInfo);
+    }
+
     // Contextual Follow-up checking
     if (lastTurn.includes('payment channel') || lastTurn.includes('upi, debit/credit card')) {
       if (text.includes('upi') || text.includes('gpay') || text.includes('phonepe') || text.includes('paytm')) {
@@ -185,6 +196,15 @@ export const chatApi = {
         actionChecklist = ['Obtain 12-digit UTR from UPI app', 'Raise dispute in UPI payment app', 'Call 1930 National Cyber Helpline', 'Change UPI PIN inside banking app'];
         return buildOfflineResponse(reply, intent, followUpSuggestions, actionChecklist, failureInfo);
       }
+    }
+
+    // Bank details disclosure
+    if (text.includes('bank details') || text.includes('banking details') || text.includes('card details') || text.includes('entered my bank')) {
+      intent = 'ACCOUNT_COMPROMISE';
+      reply = `### [Offline Guidance] Banking Details Compromise Protocol\n\nSince you entered banking details on an untrusted page:\n\n1. **Lock Your Cards & NetBanking:** Immediately open your banking app and freeze your debit/credit card and electronic transactions.\n2. **Contact Bank's Fraud Desk:** Call the 24x7 customer helpline printed on the back of your card.\n3. **Monitor Debits & OTPs:** Watch for unauthorized transactions; never approve or share any verification code.\n4. **Report to 1930 Helpline:** Call **1930** or report at cybercrime.gov.in if an unauthorized transaction occurs.`;
+      followUpSuggestions = ['Did an unauthorized debit occur?', 'Call 1930 Helpline', 'How to lock debit card?'];
+      actionChecklist = ['Freeze card/NetBanking in banking app', 'Contact bank 24x7 emergency helpline', 'Monitor SMS for unauthorized debits', 'Report to 1930 Cyber Helpline'];
+      return buildOfflineResponse(reply, intent, followUpSuggestions, actionChecklist, failureInfo);
     }
 
     if (text.includes('otp') || text.includes('password') || text.includes('pin')) {
