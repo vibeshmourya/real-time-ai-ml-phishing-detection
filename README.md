@@ -80,7 +80,7 @@ MySQL 8.0 Database (Port 3306)     FastAPI ML Service (Port 8000)       Google G
 
 ## 🚀 Deployment & Startup Instructions
 
-### Option A: Docker Compose Deployment (Recommended for Production)
+### Option A: Docker Compose Deployment
 
 #### Prerequisites
 - Docker Engine 24+ and Docker Compose v2.20+
@@ -257,13 +257,13 @@ All tests have been independently executed and verified on the current source re
 ## 🎓 Final Academic Submission & Viva Dossier (Phases 31–36)
 
 For academic evaluators, university project guides, and external viva examiners, complete consolidated documentation is provided in `docs/`:
-* 📋 **[Final Packaging Report (Phase 36)](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_36_PACKAGING_REPORT.md)**: Verification of included/excluded files, startup commands, and submission readiness.
-* 📑 **[Release Signoff Matrix (Phase 35)](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_35_RELEASE_SIGNOFF.md)**: Multi-category assessment for academic evaluation vs. production staging.
-* 🚀 **[Final Demonstration Guide (Phase 35)](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_35_FINAL_DEMO.md)**: Safe 5-step live demonstration runbook with expected empirical behaviors.
-* 🧪 **[End-to-End Regression Report (Phase 34)](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_34_REGRESSION_REPORT.md)**: Detailed test logs across all 186 automated test cases.
-* 🔬 **[ML Baseline & Evaluation Results (Phase 33)](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_33_EVALUATION_RESULTS.md)**: Empirical comparison against 4 baselines, Wilson 95% CIs, and error analysis.
-* 🎯 **[Comprehensive Viva Voce Bank (Phase 32)](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_32_VIVA_BANK.md)**: 62 in-depth technical defense questions and evidence-backed answers.
-* 🖥️ **[Academic Presentation Deck (Phase 32)](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_32_PRESENTATION_CONTENT.md)**: 14-slide presentation content with structured sections.
+* 📋 **[Final Packaging Report](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_36_PACKAGING_REPORT.md)**: Verification of included/excluded files, startup commands, and submission readiness.
+* 📑 **[Release Signoff Matrix](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_35_RELEASE_SIGNOFF.md)**: Multi-category assessment for academic evaluation vs. production staging.
+* 🚀 **[Final Demonstration Guide](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_35_FINAL_DEMO.md)**: Safe 5-step live demonstration runbook with expected empirical behaviors.
+* 🧪 **[End-to-End Regression Report](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_34_REGRESSION_REPORT.md)**: Detailed test logs across all 186 automated test cases.
+* 🔬 **[ML Baseline & Evaluation Results](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_33_EVALUATION_RESULTS.md)**: Empirical comparison against 4 baselines, Wilson 95% CIs, and error analysis.
+* 🎯 **[Comprehensive Viva Voce Bank](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_32_VIVA_BANK.md)**: 62 in-depth technical defense questions and evidence-backed answers.
+* 🖥️ **[Academic Presentation Deck](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_32_PRESENTATION_CONTENT.md)**: 14-slide presentation content with structured sections.
 * 📖 **[Comprehensive Academic Project Report](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PROJECT_REPORT.md)**: Full 21-section MCA project report adhering to academic dissertation standards.
 * 📐 **[Architecture & Data-Flow Diagrams](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/ARCHITECTURE_DIAGRAMS.md)**: High-resolution Mermaid diagrams for architecture, scan flow, ML pipeline, and deployment.
 
