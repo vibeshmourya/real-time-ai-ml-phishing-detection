@@ -34,7 +34,7 @@ Step-by-step incident containment and reporting workflows:
 * **Dispute Letter Generator:** Automatically compiles formal complaint drafts addressed to Bank Branch Managers and Cyber Crime Police quoting the **RBI Zero-Liability Circular** (`RBI/2017-18/15`) and **IT Act 2000** (`Sections 43A, 66C, 66D`).
 * **Incident Lifecycle Tracker:** Interactive checklists with real-time status progression (`Action Required`, `Report Prepared`, `Submitted Externally`, `Resolved`).
 
-### 5. Real-Time Alerts & Persistent Notification Centre (Phase 21)
+### 5. Real-Time Alerts & Persistent Notification Centre
 * **Real Application Events Only:** Alerts generated strictly from verified scans (risk $\ge 35$), suspicious QR/screenshots, and fraud incidents. Zero synthetic fabrication.
 * **Server-Sent Events (SSE):** One-way real-time alert pushes with bounded user connection limits, 25s heartbeat keep-alives, and automatic reconnection.
 * **Strict Ownership & Idempotency:** DB-level authorization checks preventing cross-user alert leakage; SHA-256 idempotency keys preventing alert duplicates.
