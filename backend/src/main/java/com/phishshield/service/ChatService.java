@@ -81,6 +81,9 @@ public class ChatService {
     @Autowired(required = false)
     private RuleEngineService ruleEngineService = new RuleEngineService();
 
+    @Autowired(required = false)
+    private GeminiService geminiService;
+
     public void setSsrfProtectionService(SSRFProtectionService ssrfProtectionService) {
         this.ssrfProtectionService = ssrfProtectionService;
     }
@@ -89,8 +92,36 @@ public class ChatService {
         this.ruleEngineService = ruleEngineService;
     }
 
+    public void setGeminiService(GeminiService geminiService) {
+        this.geminiService = geminiService;
+    }
+
     public void setCustomRestClient(RestClient customRestClient) {
         this.customRestClient = customRestClient;
+        if (this.geminiService != null) {
+            this.geminiService.setCustomRestClient(customRestClient);
+        }
+    }
+
+    private synchronized GeminiService getOrInitGeminiService() {
+        if (this.geminiService == null) {
+            this.geminiService = new GeminiService(aiProvider, aiApiKey, aiApiUrl, aiModel, aiTimeoutMs);
+            if (this.customRestClient != null) {
+                this.geminiService.setCustomRestClient(this.customRestClient);
+            }
+        } else {
+            boolean changed = !Objects.equals(this.geminiService.getApiKey(), this.aiApiKey) ||
+                    !Objects.equals(this.geminiService.getConfiguredProvider(), this.aiProvider) ||
+                    !Objects.equals(this.geminiService.getCustomApiUrl(), this.aiApiUrl) ||
+                    !Objects.equals(this.geminiService.getModel(), this.aiModel);
+            if (changed) {
+                this.geminiService.setConfiguration(aiProvider, aiApiKey, aiApiUrl, aiModel, aiTimeoutMs);
+            }
+            if (this.customRestClient != null) {
+                this.geminiService.setCustomRestClient(this.customRestClient);
+            }
+        }
+        return this.geminiService;
     }
 
     @Autowired
@@ -122,6 +153,7 @@ public class ChatService {
         this.aiApiUrl = aiApiUrl;
         this.aiModel = aiModel;
         this.aiTimeoutMs = aiTimeoutMs;
+        this.geminiService = new GeminiService(aiProvider, aiApiKey, aiApiUrl, aiModel, aiTimeoutMs);
     }
 
     public void setAiConfiguration(String aiProvider, String aiApiKey, String aiApiUrl, String aiModel, int aiTimeoutMs) {
@@ -132,6 +164,7 @@ public class ChatService {
         this.aiTimeoutMs = aiTimeoutMs;
         this.providerHealth = ProviderHealthStatus.CONFIGURED_NOT_TESTED;
         this.lastProviderError = null;
+        getOrInitGeminiService().setConfiguration(aiProvider, aiApiKey, aiApiUrl, aiModel, aiTimeoutMs);
     }
 
     public Map<String, Object> getAiProviderStatus() {
@@ -139,76 +172,13 @@ public class ChatService {
     }
 
     public Map<String, Object> getAiProviderStatus(boolean probe) {
-        Map<String, Object> status = new LinkedHashMap<>();
-        String provider = (aiProvider != null) ? aiProvider.trim().toLowerCase() : "none";
-        boolean hasKey = (aiApiKey != null && !aiApiKey.trim().isEmpty());
-        boolean isNone = "none".equals(provider) || provider.isEmpty();
-
-        // Auto-detect gemini provider if API key is present but provider was left as none
-        if (isNone && hasKey) {
-            provider = "gemini";
-            isNone = false;
-        }
-
-        status.put("provider", provider);
-        status.put("configured", !isNone && hasKey);
-        status.put("hasApiKey", hasKey);
-        status.put("model", (aiModel != null && !aiModel.isBlank()) ? aiModel.trim() : getDefaultModelForProvider(provider));
-        status.put("apiUrl", (aiApiUrl != null && !aiApiUrl.isBlank()) ? aiApiUrl.trim() : getDefaultUrlForProvider(provider));
-        status.put("timeoutMs", aiTimeoutMs);
-        status.put("activeMode", (!isNone && hasKey) ? "GEN_AI_PROVIDER" : "RULE_BASED_SAFETY_ENGINE");
-
-        if (isNone) {
-            providerHealth = ProviderHealthStatus.UNCONFIGURED;
-            status.put("status", ProviderHealthStatus.UNCONFIGURED.name());
-            status.put("configurationGuide", "To enable live Google Gemini AI, set AI_PROVIDER=gemini and AI_API_KEY in your backend environment.");
-        } else if (!hasKey) {
-            providerHealth = ProviderHealthStatus.MISSING_CREDENTIALS;
-            status.put("status", ProviderHealthStatus.MISSING_CREDENTIALS.name());
-            status.put("configurationGuide", "Provider '" + provider + "' is selected, but AI_API_KEY is missing. Please set AI_API_KEY.");
-        } else {
-            if (probe) {
-                probeProviderConnection();
-            }
-            status.put("status", providerHealth.name());
-            if (lastProviderError != null) {
-                status.put("lastError", lastProviderError);
-            }
-            if (lastProbeTimestamp != null) {
-                status.put("lastCheckedTimestamp", lastProbeTimestamp);
-            }
-        }
-
-        return status;
+        return getOrInitGeminiService().getDiagnostics(probe);
     }
 
     public synchronized boolean probeProviderConnection() {
-        String provider = (aiProvider != null) ? aiProvider.trim().toLowerCase() : "none";
-        boolean hasKey = (aiApiKey != null && !aiApiKey.trim().isEmpty());
-        if ("none".equals(provider) && hasKey) {
-            provider = "gemini";
-        }
-
-        if ("none".equals(provider) || !hasKey) {
-            providerHealth = ProviderHealthStatus.UNCONFIGURED;
-            return false;
-        }
-
-        try {
-            ChatRequest pingReq = new ChatRequest();
-            pingReq.setMessage("ping");
-            callLiveAiProviderInternal(pingReq, "ping", new IntentClassifier.ClassificationResult(NlpIntent.AMBIGUOUS_QUERY, 0.5, false), new DialogueContext(), 10);
-            providerHealth = ProviderHealthStatus.PROVIDER_AVAILABLE;
-            lastProviderError = null;
-            lastProbeTimestamp = System.currentTimeMillis();
-            return true;
-        } catch (Exception e) {
-            providerHealth = ProviderHealthStatus.PROVIDER_ERROR;
-            lastProviderError = sanitizeError(e.getMessage());
-            lastProbeTimestamp = System.currentTimeMillis();
-            return false;
-        }
+        return getOrInitGeminiService().probeConnectivity();
     }
+
 
     public String getDefaultModelForProvider(String provider) {
         if ("gemini".equalsIgnoreCase(provider)) return "gemini-1.5-flash";
@@ -242,51 +212,61 @@ public class ChatService {
         log.info("Chat NLP - Intent: {}, Confidence: {}, isFollowUp: {}, Entities: {}",
                 classification.getIntent(), classification.getConfidence(), classification.isFollowUp(), entities);
 
-        String provider = (aiProvider != null) ? aiProvider.trim().toLowerCase() : "none";
-        boolean hasAiKey = (aiApiKey != null && !aiApiKey.trim().isEmpty());
+        GeminiService gemini = getOrInitGeminiService();
 
-        // Auto-detect gemini if API key is present but provider was left as none
-        if ("none".equals(provider) && hasAiKey) {
-            provider = "gemini";
-        }
-
-        // Fail-safe handling when provider is selected but credentials are missing
-        if (!"none".equals(provider) && !hasAiKey) {
-            log.warn("AI Provider '{}' is selected but AI_API_KEY is not configured.", provider);
+        // 1. Fail-safe handling when provider is selected but credentials are missing
+        if (!"none".equalsIgnoreCase(gemini.resolveProviderName()) && !gemini.isConfigured()) {
+            log.warn("AI Provider '{}' is selected but API key is not configured.", gemini.resolveProviderName());
             providerHealth = ProviderHealthStatus.MISSING_CREDENTIALS;
-            String notice = "Provider '" + provider + "' is configured but AI_API_KEY is missing. Operating with verified Prahar rule guidance.";
+            String notice = "Provider '" + gemini.resolveProviderName() + "' is configured but API key is missing. Operating with verified Prahar rule guidance.";
             ChatResponse fallback = generateNlpResponse(request, sanitizedMessage, classification, context, true, notice);
             enrichResponseMetadata(fallback, classification, entities);
-            fallback.setProvider(provider + "_unconfigured");
+            fallback.setProvider(gemini.resolveProviderName() + "_unconfigured");
             fallback.setLiveAi(false);
             return fallback;
         }
 
-        // Live AI execution path
-        if (!"none".equals(provider) && hasAiKey) {
+        // 2. Live AI execution path
+        if (gemini.isConfigured()) {
             try {
-                ChatResponse response = callLiveAiProvider(request, sanitizedMessage, classification, context);
+                ResponseDetailLevel detailLevel = determineDetailLevel(sanitizedMessage);
+                int maxTokens = (detailLevel == ResponseDetailLevel.SHORT) ? 150 :
+                                (detailLevel == ResponseDetailLevel.DETAILED) ? 1024 : 400;
+
+                String systemPrompt = buildSystemPrompt(request, classification, context);
+                String assistantReply = gemini.generateContent(
+                        systemPrompt,
+                        request.getConversationHistory(),
+                        sanitizedMessage,
+                        getSupportedAiTools(),
+                        this::executeAiTool,
+                        maxTokens
+                );
+
+                List<String> suggestions = generateFollowUpSuggestions(classification.getIntent(), context);
+                ChatResponse response = new ChatResponse(assistantReply.trim(), true, gemini.resolveProviderName(), suggestions);
+                response.setActionChecklist(Collections.emptyList());
                 enrichResponseMetadata(response, classification, entities);
                 providerHealth = ProviderHealthStatus.PROVIDER_AVAILABLE;
                 lastProviderError = null;
                 lastProbeTimestamp = System.currentTimeMillis();
                 return response;
             } catch (Exception e) {
-                String safeReason = sanitizeError(e.getMessage());
-                log.warn("Live AI Provider call failed for provider '{}': {}", provider, safeReason);
+                String safeReason = GeminiService.sanitizeError(e.getMessage());
+                log.warn("Live AI Provider call failed for provider '{}': {}", gemini.resolveProviderName(), safeReason);
                 providerHealth = ProviderHealthStatus.PROVIDER_ERROR;
                 lastProviderError = safeReason;
                 lastProbeTimestamp = System.currentTimeMillis();
 
                 ChatResponse fallback = generateNlpResponse(request, sanitizedMessage, classification, context, true, safeReason);
                 enrichResponseMetadata(fallback, classification, entities);
-                fallback.setProvider(provider + "_fallback");
+                fallback.setProvider(gemini.resolveProviderName() + "_fallback");
                 fallback.setLiveAi(false);
                 return fallback;
             }
         }
 
-        // Return verified contextual Prahar NLP rule-based guidance (when AI_PROVIDER=none)
+        // 3. Return verified contextual Prahar NLP rule-based guidance (when AI_PROVIDER=none)
         ChatResponse response = generateNlpResponse(request, sanitizedMessage, classification, context, false, null);
         enrichResponseMetadata(response, classification, entities);
         return response;
@@ -360,6 +340,9 @@ public class ChatService {
                        lastAssistantText.contains("did the money actually debit") || lastAssistantText.contains("did you enter any passwords") ||
                        lastAssistantText.contains("bank details, or otps") || lastAssistantText.contains("password, otp, or payment details")) {
                 context.setAwaitingSlot("otp_or_link_shared");
+            } else if (lastAssistantText.contains("did you enter banking details") || lastAssistantText.contains("account passwords, or an otp") ||
+                       lastAssistantText.contains("bank details (card/account number)")) {
+                context.setAwaitingSlot("details_type");
             } else if (lastAssistantText.contains("was any money deducted") || lastAssistantText.contains("unexpected otp") ||
                        lastAssistantText.contains("which bank or service was the otp for")) {
                 context.setAwaitingSlot("debit_or_otp_status");
@@ -746,6 +729,13 @@ public class ChatService {
             sb.append("\nCurrent missing detail to collect from user: ").append(context.getPendingSlot()).append(".\n");
         }
 
+        if (context.getIncidentState() != null) {
+            String incidentSummary = context.getIncidentState().toPromptSummary();
+            if (!incidentSummary.isBlank()) {
+                sb.append("\n").append(incidentSummary).append("\n");
+            }
+        }
+
         // Attach verified scan findings from database if scanId is provided
         if (request.getScanId() != null) {
             Optional<URLScan> scanOpt = urlScanRepository.findById(request.getScanId());
@@ -1128,6 +1118,29 @@ public class ChatService {
             return;
         }
 
+        // Specific questions asked during compromise or follow-up
+        if (lower.contains("will changing my password help") || lower.contains("change my password") || lower.contains("changing password")) {
+            reply.append("Yes, changing your password immediately helps revoke active sessions and prevents further unauthorized access to that specific service.\n\n");
+            reply.append("However, if you also disclosed banking details, card numbers, or OTPs, password changes alone will not protect your bank funds — you must also contact your bank's 24x7 customer care to freeze cards/NetBanking, and call India's National Cyber Crime Helpline (**1930**).\n\n");
+            reply.append("Remember to change your password from a clean, secure device and select 'Log out of all existing devices'.");
+            return;
+        }
+
+        if (lower.contains("how can i report") || lower.contains("how do i report") || lower.contains("how to report") || lower.contains("where to report")) {
+            buildFraudReportingResponse(reply, context);
+            return;
+        }
+
+        if (lower.contains("what if i entered my details") || lower.contains("what if i entered details") || lower.contains("i entered my details") || lower.contains("entered my details")) {
+            reply.append("If you entered your details on an untrusted page, take immediate action based on what was entered:\n\n");
+            reply.append("1. **If you entered login passwords**: Change the passwords immediately from a clean device and log out of all active sessions.\n");
+            reply.append("2. **If you entered debit/credit card or bank details**: Open your official mobile banking app immediately to freeze or lock the card and electronic debit channels, and call your bank's fraud helpline.\n");
+            reply.append("3. **If you shared an OTP or UPI PIN**: Assume the attacker is attempting an immediate transfer. Call India's 1930 Cyber Helpline right away and freeze the linked account.\n\n");
+            reply.append("Did you enter banking details (card/account number), account passwords, or an OTP?");
+            context.setPendingSlot("details_type");
+            return;
+        }
+
         // Contextual follow-up continuation (e.g., "What should I do now?", "What should I do next?")
         if (IntentClassifier.isFollowUpQuery(lower)) {
             if (context.isBankDetailsEntered() || lower.contains("bank") || lower.contains("card") || lower.contains("account")) {
@@ -1179,6 +1192,14 @@ public class ChatService {
                 context.isSharedOtp();
 
         if (isOtpDisclosure) {
+            if ("account_type".equals(context.getPendingSlot()) || lower.contains("sbi") || lower.contains("bank") || lower.contains("whatsapp") || lower.contains("upi") || (context.getAccumulatedEntities() != null && context.getAccumulatedEntities().getInstitution() != null)) {
+                reply.append("Since the caller claimed to be from your bank/service and obtained your verification OTP, treat this as an active attack:\n\n");
+                reply.append("1. **Contact Your Bank's Fraud Desk Right Away**: Call your bank's 24x7 customer care or mobile banking app immediately to freeze all debit channels and NetBanking access.\n");
+                reply.append("2. **Call 1930 Helpline**: Report immediately to India's National Cyber Crime Helpline (**1930**) or at [cybercrime.gov.in](https://cybercrime.gov.in/) so the beneficiary account can be flagged and frozen in the Golden Hour.\n");
+                reply.append("3. **Reset Online Passwords**: Change your NetBanking and mobile passwords immediately from a secure device, and select 'Log out of all existing sessions'.");
+                return;
+            }
+
             reply.append("Treat this as urgent: Stop sharing any more codes with that person right now.\n\n");
             reply.append("Take these immediate actions to secure your assets:\n");
             reply.append("1. **Freeze or Lock Affected Service**: If this was for your bank, UPI, or card, contact your bank's customer care immediately or lock your accounts through your official banking app.\n");
@@ -1267,7 +1288,9 @@ public class ChatService {
                 return;
             }
 
-            reply.append("Not necessarily. Don't enter any more information on that page. Did you enter a password, OTP, or payment details, or did you only open the link?");
+            reply.append("Not necessarily. Close that browser tab immediately and don't enter any more information on that page.\n\n");
+            reply.append("Opening a link alone usually does not compromise your account, but entering passwords, OTPs, or downloading files can.\n\n");
+            reply.append("Did you enter a password, OTP, or payment details, or did you only open the link?");
             context.setPendingSlot("otp_or_link_shared");
             return;
         }
@@ -1403,6 +1426,34 @@ public class ChatService {
                 lower.contains("completed the payment") || lower.contains("money paid") ||
                 (lower.contains("paid") && !saidCodOrNotPaid)) && !saidUpi && !saidCard && !saidNetBanking;
 
+        // Follow-up question continuation (e.g., "What should I do now?", "What should I do next?")
+        if (IntentClassifier.isFollowUpQuery(lower)) {
+            String channel = context != null ? context.getSlot("paymentChannel") : null;
+            if ("UPI".equalsIgnoreCase(channel) || saidUpi) {
+                reply.append("Based on your report (payment completed via UPI for an order on a fraudulent website), here are your prioritized next steps:\n\n");
+                reply.append("1. **Locate & Note the 12-Digit UTR Number**: Open your UPI app (Google Pay, PhonePe, Paytm, BHIM) and copy down the 12-digit UTR/reference number from the debit receipt.\n");
+                reply.append("2. **Call the 1930 Cyber Helpline Immediately**: Dial India's National Cyber Crime Helpline (**1930**) or report at [cybercrime.gov.in](https://cybercrime.gov.in/) with the UTR number, scammer UPI ID, and website URL. Reporting within the Golden Hour allows authorities to freeze the destination account.\n");
+                reply.append("3. **Dispute in UPI App & Contact Bank**: Raise a fraud dispute inside your UPI app and call your bank's 24x7 fraud desk to initiate an inter-bank recall.\n");
+                reply.append("4. **Secure Credentials**: If you entered any banking passwords or PINs on the fake site, change your passwords and reset your UPI PIN immediately from your official bank app.\n");
+                reply.append("5. **Preserve All Evidence**: Keep screenshots of the fake website, order page, and bank debit SMS.");
+                return;
+            } else if ("CARD".equalsIgnoreCase(channel) || saidCard) {
+                reply.append("Based on your report (payment made via card on a fraudulent website), here are your prioritized next steps:\n\n");
+                reply.append("1. **Lock/Freeze Your Card Immediately**: Open your mobile banking app and lock your card, or call your bank's emergency hotline to cancel it.\n");
+                reply.append("2. **File a Fraud Dispute / Chargeback**: Formally request a chargeback for the unauthorized merchant transaction.\n");
+                reply.append("3. **Report to 1930 / cybercrime.gov.in**: Lodge a cyber financial fraud complaint with the transaction details.\n");
+                reply.append("4. **Request Card Replacement**: Ask your bank to issue a new card with a fresh card number and CVV.");
+                return;
+            } else {
+                reply.append("Here are your prioritized next steps to handle this fraudulent website incident:\n\n");
+                reply.append("1. **Stop Further Contact**: Do not interact with the seller or click any tracking links sent to your phone or email.\n");
+                reply.append("2. **Dispute Any Charges**: If you paid online, immediately contact your payment provider or bank and call **1930** to freeze transferred funds.\n");
+                reply.append("3. **Secure Your Accounts**: If you entered passwords or personal details, change those passwords across your email and banking accounts.\n");
+                reply.append("4. **Preserve Evidence**: Save copies of the website URL, order receipts, and communications for official cybercrime reporting at [cybercrime.gov.in](https://cybercrime.gov.in/).");
+                return;
+            }
+        }
+
         if (saidPaidOnline) {
             reply.append("I understand - since the payment has already been completed to the fraudulent seller online, we must act immediately to contain the damage and attempt recovery:\n\n");
             reply.append("1. **Contact Your Bank / Payment Provider Immediately**: Inform them that you transferred funds to a fraudulent merchant and request an urgent dispute or chargeback.\n");
@@ -1485,21 +1536,113 @@ public class ChatService {
 
         ResponseDetailLevel detailLevel = determineDetailLevel(userMessage);
 
-        // Specific query: How to detect fake websites / "ways to identify a fake website" / "five ways to identify a fake website"
-        if (lower.contains("detect fake") || lower.contains("spot fake") || lower.contains("identify fake") ||
-            lower.contains("fake website") || lower.contains("fake site") || lower.contains("ways to identify")) {
+        // Specific query: Difference between phishing and online scams
+        if (lower.contains("difference") && lower.contains("phishing") && (lower.contains("scam") || lower.contains("scams") || lower.contains("online scam"))) {
+            reply.append("### Difference Between Phishing and Online Scams\n\n");
+            reply.append("- **Online Scam (The Umbrella Term)**: A general category encompassing any fraudulent scheme conducted over the internet to swindle victims out of money, goods, or identity (such as fake shopping sites, lottery frauds, job offer scams, and investment schemes).\n");
+            reply.append("- **Phishing (A Specific Social Engineering Technique)**: A targeted attack method where fraudsters impersonate trusted institutions (banks, government portals, courier companies) via fake emails, SMS, or deceptive websites specifically to harvest confidential credentials like passwords, NetBanking logins, and OTPs.\n\n");
+            reply.append("**Key Distinction**: All phishing attacks are online scams, but not all online scams involve phishing. For example, paying for an item on a counterfeit store that never arrives is an e-commerce scam, whereas being tricked into entering your bank password on a spoofed login page is phishing.");
+            return;
+        }
+
+        // Specific query: Difference between OTP and UPI PIN
+        if (lower.contains("difference") && (lower.contains("otp") || lower.contains("one time password")) && (lower.contains("upi pin") || lower.contains("pin"))) {
+            reply.append("### Difference Between an OTP and a UPI PIN\n\n");
+            reply.append("Both are critical authentication secrets in digital banking, but they have key differences in how they function:\n\n");
+            reply.append("1. **OTP (One-Time Password)**:\n");
+            reply.append("   - **Generated By**: Your bank or payment service and sent dynamically via SMS or email.\n");
+            reply.append("   - **Lifespan**: Valid for only a single transaction or login, typically expiring in 3 to 10 minutes.\n");
+            reply.append("   - **Purpose**: Verifies that you possess the registered device (acting as a second factor of authentication).\n");
+            reply.append("   - **Direction**: You receive it; you never create it.\n\n");
+            reply.append("2. **UPI PIN (Unified Payments Interface PIN)**:\n");
+            reply.append("   - **Created By**: You, using your debit card details during UPI setup.\n");
+            reply.append("   - **Lifespan**: A permanent 4 or 6-digit secret code that stays the same until you choose to change it.\n");
+            reply.append("   - **Purpose**: Authorizes debiting money from your linked bank account.\n");
+            reply.append("   - **Golden Rule**: Entering a UPI PIN **always deducts money** from your account. You **never** need to enter a UPI PIN to receive money or refunds.\n\n");
+            reply.append("**Security Rule**: Never disclose your OTP or enter your UPI PIN on third-party links or over phone calls. Legitimate bank staff will never ask for either.");
+            return;
+        }
+
+        // Specific query: What are online scams?
+        if (lower.contains("online scam") || lower.contains("online scams") ||
+            lower.contains("what are scams") || lower.contains("what is a scam") ||
+            (lower.contains("scam") && (lower.startsWith("what are") || lower.startsWith("what is") || lower.contains("explain") || lower.contains("define")))) {
             
             if (detailLevel == ResponseDetailLevel.SHORT) {
-                reply.append("To spot a fake website, check for misspelled domain names, unrealistic discounts, payment requests via personal UPI/QR codes, and scan the link in Prahar.");
+                reply.append("Online scams are deceptive schemes where fraudsters use the internet, emails, or messages to trick people into giving away money, personal data, or account credentials.");
                 return;
             }
             
-            reply.append("To identify a fake or fraudulent website, check these key indicators:\n\n");
+            reply.append("Online scams are deceptive schemes committed by cybercriminals over the internet to trick individuals into parting with their money, sensitive personal data, or banking credentials.\n\n");
+            reply.append("**Common Examples of Online Scams:**\n");
+            reply.append("- **Phishing & Impersonation**: Deceptive messages pretending to be from banks, tax authorities, or courier services asking you to update KYC or pay urgent fees.\n");
+            reply.append("- **Fake Shopping Websites**: Counterfeit e-commerce stores offering 80–90% discounts that collect upfront payments but never deliver goods.\n");
+            reply.append("- **UPI QR Code & Collect Request Traps**: Fraudsters posing as online buyers (e.g., on OLX) asking you to scan a QR code to 'receive' money.\n");
+            reply.append("- **Work-From-Home / Task Scams**: Telegram and WhatsApp messages offering high daily returns for simple tasks like rating hotels or liking videos.\n");
+            reply.append("- **Investment & Lottery Scams**: Schemes promising guaranteed high returns on cryptocurrency, forex, or fake lotteries.\n\n");
+            reply.append("**Best Defense**: Never share your OTP, UPI PIN, or passwords; verify links using Prahar's **Scan** tab; and never send money to claim prizes or job earnings.");
+            return;
+        }
+
+        // Specific query: What are suspicious links?
+        if (lower.contains("suspicious link") || lower.contains("suspicious links") ||
+            lower.contains("what is a suspicious link") || lower.contains("what are suspicious links") ||
+            (lower.contains("link") && (lower.startsWith("what is") || lower.startsWith("what are") || lower.contains("explain") || lower.contains("define")) && !lower.contains("clicked") && !lower.contains("opened"))) {
+            
+            if (detailLevel == ResponseDetailLevel.SHORT) {
+                reply.append("Suspicious links are deceptive web addresses designed to trick you into visiting phishing websites, downloading malware, or revealing sensitive banking credentials.");
+                return;
+            }
+            
+            reply.append("Suspicious links are deceptive or untrusted web addresses (URLs) crafted by attackers to lure victims into harmful actions, such as entering passwords on cloned portals or downloading spyware.\n\n");
+            reply.append("**How to Recognize Suspicious Links:**\n");
+            reply.append("1. **Typosquatting & Misspellings**: Look for intentional character alterations (e.g., `sbi-kyc-update.com` or `paytm-refund.top` instead of official bank domains).\n");
+            reply.append("2. **Suspicious Domain Extensions**: Frequent use of cheap or free top-level domains such as `.xyz`, `.top`, `.tk`, or `.cc`.\n");
+            reply.append("3. **Masked & Shortened URLs**: Services like `bit.ly` or `tinyurl.com` that conceal the actual destination web address.\n");
+            reply.append("4. **Urgent or Threatening Context**: Links sent alongside warnings of account suspension, electricity disconnection, or expiring lottery rewards.\n\n");
+            reply.append("**How to Safely Verify Links:**\n");
+            reply.append("Do not click or tap the link in your browser. Instead, copy the URL and paste it into Prahar's **Scan** tab. Prahar evaluates the link's structural characteristics, domain age, and threat intelligence to tell you if it is safe.");
+            return;
+        }
+
+        // Specific query: How to detect / recognize fake or replica / imitation websites
+        if (lower.contains("detect fake") || lower.contains("spot fake") || lower.contains("identify fake") ||
+            lower.contains("recognize fake") || lower.contains("recognize a fake") ||
+            lower.contains("recognize a replica") || lower.contains("recognize replica") ||
+            lower.contains("replica website") || lower.contains("replica site") ||
+            lower.contains("imitation website") || lower.contains("imitation site") ||
+            lower.contains("cloned website") || lower.contains("cloned site") ||
+            lower.contains("fake website") || lower.contains("fake site") || lower.contains("ways to identify") ||
+            lower.contains("how do i recognize") || lower.contains("how to recognize")) {
+            
+            if (detailLevel == ResponseDetailLevel.SHORT) {
+                reply.append("To recognize a replica website, check the exact domain spelling in your browser address bar, beware of deep discounts and rushed timers, verify payment gateways, and scan the link in Prahar.");
+                return;
+            }
+            
+            reply.append("To identify and recognize a replica or fake website, watch for these key warning signs:\n\n");
             reply.append("1. **Domain Name & Typosquatting**: Inspect the exact domain spelling in your browser address bar. Attackers use lookalikes (e.g., `amaz0n-deal.top` instead of `amazon.in`).\n");
-            reply.append("2. **HTTPS Does NOT Guarantee Safety**: Scammers easily get free SSL certificates; encryption secures transmission but does not verify website authenticity.\n");
-            reply.append("3. **Unrealistic Discounts & Urgency**: Extremely low prices (90% off) accompanied by countdown timers are social engineering tricks to force rushed decisions.\n");
-            reply.append("4. **Irregular Payment Methods**: Fake sites often demand direct UPI QR code scans or peer-to-peer transfers instead of reputable payment gateways.\n");
-            reply.append("5. **Scan with Prahar**: Paste the URL into Prahar's **Scan** tab to check its domain age, threat intelligence, and risk score before transacting.");
+            reply.append("2. **HTTPS Does NOT Guarantee Safety**: Scammers easily get free SSL certificates; HTTPS encryption secures data in transit but does not verify website authenticity.\n");
+            reply.append("3. **Copied Branding & Low-Quality Visuals**: Replica sites copy official logos and banners, but often display distorted images, broken navigation links, and grammatical errors.\n");
+            reply.append("4. **Unrealistic Discounts & Urgency**: Extremely low prices (90% off) accompanied by countdown timers are social engineering tricks to force rushed decisions.\n");
+            reply.append("5. **Irregular Payment Methods**: Fake sites often demand direct UPI QR code scans or peer-to-peer transfers instead of reputable payment gateways.\n");
+            reply.append("6. **Scan with Prahar**: Paste the URL into Prahar's **Scan** tab to check its domain age, threat intelligence, and risk score before transacting.");
+            return;
+        }
+
+        // Specific query: How can I stay safe online?
+        if (lower.contains("stay safe online") || lower.contains("how can i stay safe") || lower.contains("how to stay safe") || lower.contains("safe online")) {
+            if (detailLevel == ResponseDetailLevel.SHORT) {
+                reply.append("To stay safe online, use strong passwords with 2FA, never share OTPs or UPI PINs, verify links in Prahar before clicking, and keep your software updated.");
+                return;
+            }
+            reply.append("Here are practical, high-impact recommendations to keep yourself secure online:\n\n");
+            reply.append("1. **Strong Passwords & 2FA**: Protect your banking and primary email with strong, unique passwords. Enable app-based Two-Factor Authentication (such as Google Authenticator) wherever possible.\n");
+            reply.append("2. **Never Share Verification Secrets**: Legitimate banks, police officers, and government departments will **never** ask for your OTP, UPI PIN, ATM PIN, or NetBanking password.\n");
+            reply.append("3. **UPI Golden Rule**: Remember that entering your UPI PIN is **only for sending money**, never for receiving funds, refunds, or cashback.\n");
+            reply.append("4. **Inspect Links Before Clicking**: Beware of urgent SMS alerts claiming electricity disconnections or KYC suspensions. Verify any suspicious URL by pasting it into Prahar's **Scan** tab.\n");
+            reply.append("5. **Download Only from Official Stores**: Install applications exclusively from Google Play Store or Apple App Store; never install APK files sent via WhatsApp or Telegram.\n");
+            reply.append("6. **Emergency Helpline (1930)**: If an unauthorized transaction happens, immediately call India's National Cyber Crime Helpline (**1930**) within the Golden Hour (first 2–3 hours) to freeze the stolen funds.");
             return;
         }
 
@@ -1882,6 +2025,11 @@ public class ChatService {
                 lower.contains("how to recognize") || lower.contains("how do i recognize") ||
                 lower.contains("how do we detect") || lower.contains("how to detect") ||
                 lower.contains("spot fake") || lower.contains("detect fake") || lower.contains("fake website") ||
+                lower.contains("replica website") || lower.contains("replica site") || lower.contains("imitation website") ||
+                lower.contains("suspicious link") || lower.contains("suspicious links") ||
+                lower.contains("online scam") || lower.contains("online scams") ||
+                lower.contains("difference between") ||
+                lower.contains("stay safe online") || lower.contains("how can i stay safe") || lower.contains("how to stay safe") ||
                 lower.equals("phishing") || lower.equals("otp") || lower.equals("upi") || lower.equals("firewall") ||
                 lower.equals("phishing?") || lower.equals("otp?") || lower.equals("upi?") || lower.equals("firewall?");
 

@@ -12,9 +12,9 @@ import java.util.List;
 @Repository
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
-    Page<ChatMessage> findByConversationOrderByCreatedAtAsc(ChatConversation conversation, Pageable pageable);
+    Page<ChatMessage> findByConversationOrderByCreatedAtAscIdAsc(ChatConversation conversation, Pageable pageable);
 
-    List<ChatMessage> findTop20ByConversationOrderByCreatedAtAsc(ChatConversation conversation);
+    List<ChatMessage> findTop20ByConversationOrderByCreatedAtAscIdAsc(ChatConversation conversation);
 
     long countByConversation(ChatConversation conversation);
 }

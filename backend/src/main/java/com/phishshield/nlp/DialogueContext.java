@@ -21,10 +21,14 @@ public class DialogueContext {
     private NlpIntent lastIntent;
     private String awaitingSlot; // e.g. "paymentChannel", "sharedOtpOrCredentials"
     private ExtractedEntities accumulatedEntities = new ExtractedEntities();
+    private IncidentState incidentState = new IncidentState();
     private final List<Turn> turns = new ArrayList<>();
     private int turnCount = 0;
 
     public DialogueContext() {}
+
+    public IncidentState getIncidentState() { return incidentState; }
+    public void setIncidentState(IncidentState incidentState) { this.incidentState = incidentState; }
 
     public NlpIntent getLastIntent() { return lastIntent; }
     public void setLastIntent(NlpIntent lastIntent) { this.lastIntent = lastIntent; }
@@ -102,18 +106,54 @@ public class DialogueContext {
 
     public void mergeEntities(ExtractedEntities newEntities) {
         if (newEntities == null) return;
-        if (newEntities.getAmount() != null) accumulatedEntities.setAmount(newEntities.getAmount());
-        if (newEntities.getPaymentChannel() != null) accumulatedEntities.setPaymentChannel(newEntities.getPaymentChannel());
-        if (newEntities.getInstitution() != null) accumulatedEntities.setInstitution(newEntities.getInstitution());
+        if (newEntities.getAmount() != null) {
+            accumulatedEntities.setAmount(newEntities.getAmount());
+            incidentState.setAmount(newEntities.getAmount().toPlainString());
+        }
+        if (newEntities.getPaymentChannel() != null) {
+            accumulatedEntities.setPaymentChannel(newEntities.getPaymentChannel());
+            incidentState.setPaymentChannel(newEntities.getPaymentChannel());
+        }
+        if (newEntities.getInstitution() != null) {
+            accumulatedEntities.setInstitution(newEntities.getInstitution());
+            incidentState.setInstitution(newEntities.getInstitution());
+        }
         if (newEntities.getDirection() != null) accumulatedEntities.setDirection(newEntities.getDirection());
-        if (newEntities.getTransactionRef() != null) accumulatedEntities.setTransactionRef(newEntities.getTransactionRef());
-        if (newEntities.getClickedLink() != null) accumulatedEntities.setClickedLink(newEntities.getClickedLink());
-        if (newEntities.getSharedOtp() != null) accumulatedEntities.setSharedOtp(newEntities.getSharedOtp());
-        if (newEntities.getInstalledApk() != null) accumulatedEntities.setInstalledApk(newEntities.getInstalledApk());
-        if (newEntities.getBankDetailsEntered() != null) accumulatedEntities.setBankDetailsEntered(newEntities.getBankDetailsEntered());
-        if (newEntities.getCredentialsDisclosed() != null) accumulatedEntities.setCredentialsDisclosed(newEntities.getCredentialsDisclosed());
-        if (newEntities.getMoneyLost() != null) accumulatedEntities.setMoneyLost(newEntities.getMoneyLost());
-        if (newEntities.getProtectiveActionTaken() != null) accumulatedEntities.setProtectiveActionTaken(newEntities.getProtectiveActionTaken());
-        if (newEntities.getUserActionTaken() != null) accumulatedEntities.setUserActionTaken(newEntities.getUserActionTaken());
+        if (newEntities.getTransactionRef() != null) {
+            accumulatedEntities.setTransactionRef(newEntities.getTransactionRef());
+            incidentState.setTransactionRef(newEntities.getTransactionRef());
+        }
+        if (newEntities.getClickedLink() != null) {
+            accumulatedEntities.setClickedLink(newEntities.getClickedLink());
+            incidentState.setLinkClicked(newEntities.getClickedLink());
+        }
+        if (newEntities.getSharedOtp() != null) {
+            accumulatedEntities.setSharedOtp(newEntities.getSharedOtp());
+            incidentState.setOtpOrPinShared(newEntities.getSharedOtp());
+        }
+        if (newEntities.getInstalledApk() != null) {
+            accumulatedEntities.setInstalledApk(newEntities.getInstalledApk());
+            incidentState.setAppInstalled(newEntities.getInstalledApk());
+        }
+        if (newEntities.getBankDetailsEntered() != null) {
+            accumulatedEntities.setBankDetailsEntered(newEntities.getBankDetailsEntered());
+            incidentState.setBankDetailsEntered(newEntities.getBankDetailsEntered());
+        }
+        if (newEntities.getCredentialsDisclosed() != null) {
+            accumulatedEntities.setCredentialsDisclosed(newEntities.getCredentialsDisclosed());
+            incidentState.setCredentialsEntered(newEntities.getCredentialsDisclosed());
+        }
+        if (newEntities.getMoneyLost() != null) {
+            accumulatedEntities.setMoneyLost(newEntities.getMoneyLost());
+            incidentState.setMoneyLost(newEntities.getMoneyLost());
+        }
+        if (newEntities.getProtectiveActionTaken() != null) {
+            accumulatedEntities.setProtectiveActionTaken(newEntities.getProtectiveActionTaken());
+            incidentState.setProtectiveActionTaken(newEntities.getProtectiveActionTaken());
+        }
+        if (newEntities.getUserActionTaken() != null) {
+            accumulatedEntities.setUserActionTaken(newEntities.getUserActionTaken());
+            incidentState.addActionCompleted(newEntities.getUserActionTaken());
+        }
     }
 }

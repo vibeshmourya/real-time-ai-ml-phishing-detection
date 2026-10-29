@@ -90,7 +90,7 @@ public class ChatHistoryService {
         ChatConversation conv = conversationRepository.findByIdAndUser(conversationId, user)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation not found or access denied for id: " + conversationId));
 
-        Page<ChatMessage> messagePage = messageRepository.findByConversationOrderByCreatedAtAsc(conv, pageable);
+        Page<ChatMessage> messagePage = messageRepository.findByConversationOrderByCreatedAtAscIdAsc(conv, pageable);
         List<ChatMessageItemDto> messageDtos = messagePage.getContent().stream()
                 .map(m -> new ChatMessageItemDto(
                         m.getId(),

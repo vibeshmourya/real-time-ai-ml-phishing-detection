@@ -1,132 +1,159 @@
-# Prahar AI 2.0 — Chatbot Architecture Document
-**Real-Time Context-Aware Cybersecurity Intelligence & Incident Guidance Assistant**
-*Status: Verified Production Architecture (Release 2.0)*
+# PRAHAR AI CHATBOT ARCHITECTURE & INTEGRATION SPECIFICATION
+
+**System:** Prahar — Real-Time AI/ML-Based Phishing Detection & Prevention System  
+**Module:** Intelligent Cyber Safety Assistant (`ChatService` & `GeminiService`)  
+**Design Version:** 2.0 (Dual-Mode Native LLM & Incident State Machine)  
 
 ---
 
-## 1. Executive Summary & Pipeline Overview
+## 1. System Overview & Architecture
 
-Prahar AI 2.0 upgrades the cybersecurity assistant into a hybrid, context-aware intelligence system powered by Google Gemini (OpenAI-compatible schema) backed by verified deterministic security rules, multi-signal phishing detection, and SSRF-hardened local execution.
+Prahar's AI Chatbot acts as an expert cybersecurity advisor and incident-containment assistant tailored for Indian citizens facing digital deception, phishing, and financial fraud (UPI scams, credit card theft, unauthorized debits, and credential theft).
 
-### End-to-End Message Flow Architecture
+The system features **dual-mode operational intelligence**:
+1. **Live Generative AI Mode (`GeminiService`):** Connects to Google's official Gemini models (e.g. `gemini-1.5-flash`, `gemini-1.5-pro`) to provide natural, contextual, multi-turn reasoning with tool invocation.
+2. **Context-Aware Rule & Safety Engine:** An offline, deterministic fallback engine that activates seamlessly if credentials are missing or the provider is temporarily unavailable. It guarantees 100% uptime with validated Indian cyber law and banking protocols (1930 Helpline, CFCFRMS, CEIR).
 
-```
-React / Vite Frontend (PraharChatbot / ChatAssistantPage)
-   │
-   ▼ HTTP POST /api/chat (JSON Payload: message, history, scanContext)
-ChatController.java
-   │
-   ▼ Input Sanitization & Entity Extraction
-ChatService.java (sanitizeInput: PCI card redaction, URL extraction)
-   │
-   ▼ Multi-Turn Dialogue Tracking
-DialogueContext.java (10-turn sliding window, slot tracking, topic shift detection)
-   │
-   ▼ Intent Classification
-IntentClassifier.java (Deterministic heuristics + intent disambiguation)
-   │
-   ├─── If Provider Configured & Available (Google Gemini) ───────────┐
-   │                                                                 │
-   │   REST Client with Connection & Read Timeouts (15,000ms)         │
-   │   Authorization: Bearer <AI_API_KEY> (Server-Side Only)         │
-   │                                                                 │
-   │   Function Calling / Tools Schema:                              │
-   │   - `analyze_url`: Evaluates live URL via SSRF & RuleEngine     │
-   │   - `explain_scan_result`: Fetches real database scan findings   │
-   │                                                                 │
-   │   Gemini Tool Execution Loop (Server-side validation)            │
-   │   Final Natural Language Response Generation                   │
-   │   Duplicate Assembly Elimination: actionChecklist = []          │
-   │                                                                 │
-   └─── If Provider Fails / Unconfigured (Transparent Fallback) ─────┘
-       Deterministic Prahar Rule Engine & Contextual Guidances
-       - General cyber safety definitions (OTP, 2FA, Phishing)
-       - Financial fraud Golden Hour guidance (1930 / cybercrime.gov.in)
-       - Active incident checklists (frozen for educational queries)
-   │
-   ▼ Unified Response Assembly (ChatResponse DTO)
-Single Contract: { reply, isLiveAi, provider, suggestions, actionChecklist, entities }
-   │
-   ▼ Frontend Message Rendering
-Clean Markdown rendering, dynamic follow-up chips, copy action, no internal labels.
+```mermaid
+flowchart TD
+    User([User Prompt / Message]) --> Controller[ChatController /api/chat]
+    Controller --> Sanitize[Input Sanitizer: Card Redaction & Normalization]
+    Sanitize --> ContextRecon[Context Reconstructor & Entity Extractor]
+    ContextRecon --> StateMachine[IncidentState Accumulator]
+    StateMachine --> IntentClass[Intent Classifier & Follow-Up Evaluator]
+    
+    IntentClass --> ModeDecision{Is Gemini Configured & Active?}
+    
+    ModeDecision -- Yes --> GeminiCall[GeminiService: Native v1beta :generateContent]
+    GeminiCall --> ToolCheck{Tool Call Requested?}
+    
+    ToolCheck -- Yes: analyze_url --> SSRFCheck[SSRF Security Validator]
+    SSRFCheck --> RuleEngine[Multi-Signal Heuristic & ML Engine]
+    RuleEngine --> ToolReturn[Feed Inspection Data to Gemini]
+    ToolReturn --> GeminiCall
+    
+    ToolCheck -- No --> OutputFormat[Adaptive Length & Prompt Enforcer]
+    
+    ModeDecision -- No / Provider Error --> RuleFallback[Contextual Deterministic Safety Engine]
+    RuleFallback --> OutputFormat
+    
+    OutputFormat --> ResponseEnricher[Metadata & Suggestion Generator]
+    ResponseEnricher --> ClientOutput([Structured ChatResponse DTO])
 ```
 
 ---
 
-## 2. Component Architecture & Responsibility Matrix
+## 2. Dedicated Gemini Provider (`GeminiService`)
 
-| Component | File Path | Architectural Responsibility | Status |
+### 2.1 Dual Protocol Support
+
+`GeminiService` supports two HTTP invocation protocols:
+
+1. **Official Native Google Gemini Protocol (Default):**
+   - **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`
+   - **Header:** `x-goog-api-key: <GEMINI_API_KEY>`
+   - **Payload Format:**
+     ```json
+     {
+       "systemInstruction": {
+         "parts": [{ "text": "<System Prompt + IncidentState Summary>" }]
+       },
+       "contents": [
+         { "role": "user", "parts": [{ "text": "<Previous User Turn>" }] },
+         { "role": "model", "parts": [{ "text": "<Previous Assistant Turn>" }] },
+         { "role": "user", "parts": [{ "text": "<Current User Message>" }] }
+       ],
+       "generationConfig": {
+         "temperature": 0.2,
+         "maxOutputTokens": 400
+       }
+     }
+     ```
+
+2. **OpenAI-Compatible Proxy Protocol (Configurable via `AI_API_URL`):**
+   - **Endpoint:** Custom proxy ending in `/chat/completions`
+   - **Header:** `Authorization: Bearer <API_KEY>`
+
+### 2.2 Error Categorization & Status Mapping
+
+`GeminiService` monitors live provider health across distinct states:
+
+| Status Code | Description | Provider State | User Experience |
 | :--- | :--- | :--- | :--- |
-| **Frontend Chat Page** | [ChatAssistantPage.jsx](file:///d:/MCA%20notes/MINI%20PRO%20SIH/frontend/src/pages/ChatAssistantPage.jsx) | Full-page interactive chat interface, quick chips, copy support, clean metadata footer | `VERIFIED` |
-| **Frontend Widget** | [PraharChatbot.jsx](file:///d:/MCA%20notes/MINI%20PRO%20SIH/frontend/src/components/PraharChatbot.jsx) | Floating global chatbot drawer across all pages with responsive states | `VERIFIED` |
-| **Chat API Controller** | [ChatController.java](file:///d:/MCA%20notes/MINI%20PRO%20SIH/backend/src/main/java/com/phishshield/controller/ChatController.java) | REST endpoint (`/api/chat`, `/api/chat/status`), request mapping, validation | `VERIFIED` |
-| **Chat Core Service** | [ChatService.java](file:///d:/MCA%20notes/MINI%20PRO%20SIH/backend/src/main/java/com/phishshield/service/ChatService.java) | Gemini provider orchestration, tool calling loop, context assembly, fallback generation | `VERIFIED` |
-| **Dialogue Manager** | [DialogueContext.java](file:///d:/MCA%20notes/MINI%20PRO%20SIH/backend/src/main/java/com/phishshield/nlp/DialogueContext.java) | Multi-turn slot memory, pending details, turn history, entity accumulation | `VERIFIED` |
-| **Intent Classifier** | [IntentClassifier.java](file:///d:/MCA%20notes/MINI%20PRO%20SIH/backend/src/main/java/com/phishshield/nlp/IntentClassifier.java) | Intent taxonomy, topic-change detection, slot-aware disambiguation | `VERIFIED` |
-| **Entity Extractor** | [EntityExtractor.java](file:///d:/MCA%20notes/MINI%20PRO%20SIH/backend/src/main/java/com/phishshield/nlp/EntityExtractor.java) | Extraction of amounts, UPI/cards, OTP sharing, URLs, payment institutions | `VERIFIED` |
-| **SSRF Protection** | [SSRFProtectionService.java](file:///d:/MCA%20notes/MINI%20PRO%20SIH/backend/src/main/java/com/phishshield/service/SSRFProtectionService.java) | Strict validation preventing target requests to localhost, loopback, private RFC1918, metadata | `VERIFIED` |
-| **Rule Engine** | [RuleEngineService.java](file:///d:/MCA%20notes/MINI%20PRO%20SIH/backend/src/main/java/com/phishshield/service/RuleEngineService.java) | Multi-signal URL heuristic evaluation, brand impersonation, entropy, typosquatting | `VERIFIED` |
+| **UNCONFIGURED** | `AI_PROVIDER=none` | `UNCONFIGURED` | Operates in high-performance rule safety mode. |
+| **MISSING_CREDENTIALS** | Provider chosen, API key empty | `MISSING_CREDENTIALS` | Friendly service notice; operates in verified rule safety mode. |
+| **CONFIGURED_NOT_TESTED** | Key set, no requests sent yet | `CONFIGURED_NOT_TESTED` | Ready for first message or explicit probe. |
+| **PROVIDER_AVAILABLE** | Successful generation or PONG | `PROVIDER_AVAILABLE` | Live Gemini generative AI responses. |
+| **PROVIDER_ERROR** | HTTP 401, 404, 429, 503, Timeout | `PROVIDER_ERROR` | Automatic fail-safe fallback to deterministic safety guidance. |
 
 ---
 
-## 3. Gemini Function Calling Architecture
+## 3. Incident State Machine (`IncidentState`)
 
-Gemini model (`gemini-1.5-flash` or user-specified model) is integrated via the OpenAI-compatible REST endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`) using server-side Bearer authorization.
+Multi-turn dialogues accumulate facts into a structured `IncidentState` model in `DialogueContext`:
 
-### Supported Tools Specification
-
-1. **`analyze_url(url: string)`**:
-   - **Invocation trigger**: When a user pastes or requests analysis of a target web link.
-   - **Server-side validation**:
-     1. Validates string format and non-emptiness.
-     2. Enforces SSRF boundary: rejects `127.0.0.1`, `localhost`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.169.254`.
-     3. Calls [RuleEngineService.java](file:///d:/MCA%20notes/MINI%20PRO%20SIH/backend/src/main/java/com/phishshield/service/RuleEngineService.java) to evaluate lexical risk, domain entropy, brand impersonation, and threat indicators.
-     4. Feeds real JSON evaluation findings back into conversation for Gemini to explain naturally to the user.
-   - **Status**: `VERIFIED`
-
-2. **`explain_scan_result(scan_id: integer)`**:
-   - **Invocation trigger**: When a user queries why a specific scan was flagged (e.g. Scan #142).
-   - **Server-side validation**:
-     1. Validates positive integer identifier.
-     2. Queries [URLScanRepository.java](file:///d:/MCA%20notes/MINI%20PRO%20SIH/backend/src/main/java/com/phishshield/repository/URLScanRepository.java).
-     3. Returns verified database verdict, risk score, threat category, and detection explanation summary.
-   - **Status**: `VERIFIED`
-
----
-
-## 4. Single-Contract Response Assembly & Anti-Duplication Strategy
-
-### Response Contract DTO ([ChatResponse.java](file:///d:/MCA%20notes/MINI%20PRO%20SIH/backend/src/main/java/com/phishshield/dto/response/ChatResponse.java))
-
-```json
-{
-  "reply": "Markdown formatted string containing comprehensive guidance",
-  "isLiveAi": false,
-  "provider": "prahar_nlp",
-  "followUpSuggestions": [
-    "What should I do if I clicked it?",
-    "Scan another URL or message"
-  ],
-  "actionChecklist": [],
-  "extractedEntities": {
-    "channel": "UPI"
-  },
-  "intent": "GENERAL_CYBER_SAFETY",
-  "confidence": 0.95
+```java
+public class IncidentState {
+    private IncidentType incidentType;          // SUSPICIOUS_LINK_CLICKED, OTP_PIN_DISCLOSED, etc.
+    private Boolean linkClicked;                // Confirmed URL click
+    private Boolean credentialsEntered;         // Login username/password disclosed
+    private Boolean otpOrPinShared;             // OTP or UPI PIN shared
+    private Boolean bankDetailsEntered;         // Card number, CVV, or NetBanking ID entered
+    private Boolean moneyLost;                  // Confirmed financial deduction
+    private Boolean appInstalled;               // Malicious APK / AnyDesk / Screen share
+    private String paymentChannel;              // UPI, DEBIT_CARD, CREDIT_CARD, NETBANKING
+    private String amount;                      // Monetary amount involved
+    private String institution;                 // Bank name (e.g. SBI, HDFC, ICICI)
+    private String transactionRef;              // UTR / Reference number
+    private Boolean reportedTo1930;             // Whether user already contacted helpline
+    private final List<String> completedActions = new ArrayList<>();
 }
 ```
 
-### De-Duplication Rules
-- **Rule 1 (Live AI responses)**: When `isLiveAi == true`, `response.setActionChecklist(Collections.emptyList())`. Gemini generates the complete answer; no canned checklists are attached.
-- **Rule 2 (Educational queries in rule mode)**: Educational questions (`what is`, `define`, `explain`, `does https`, `how does`) return `Collections.emptyList()` for `actionChecklist`.
-- **Rule 3 (Active Emergency Incidents)**: Only active fraud emergencies (`UNKNOWN_DEBIT`, `UPI_FRAUD`, `ATM_CARD_FRAUD`, `FAKE_SHOPPING_SCAM`, `OTP_DISCLOSURE`, `ACCOUNT_COMPROMISE`, `STOLEN_PHONE`, `SIM_SWAP`, `FAKE_BANK_APP`) generate structured `actionChecklist` items.
-- **Rule 4 (Frontend Guard)**: [PraharChatbot.jsx](file:///d:/MCA%20notes/MINI%20PRO%20SIH/frontend/src/components/PraharChatbot.jsx) and [ChatAssistantPage.jsx](file:///d:/MCA%20notes/MINI%20PRO%20SIH/frontend/src/pages/ChatAssistantPage.jsx) only render the action checklist card when `actionChecklist.length > 0 && !isLiveAi`.
+### State Machine Lifecycle
+1. **Extraction & Merging:** Every user turn is scanned by `EntityExtractor`. Any new confirmed facts (e.g., amount, bank, link click, OTP disclosure) update `IncidentState`.
+2. **Anti-Repetition Prompt Synthesis:** `incidentState.toPromptSummary()` generates a high-priority prompt section:
+   ```
+   [Confirmed Incident State - Do NOT re-ask these details]:
+   - Link Clicked: Yes
+   - OTP or PIN Disclosed: Yes
+   - Affected Bank/Service: SBI
+   - Priority Directive: Focus on freezing SBI electronic channels and Golden Hour 1930 reporting.
+   ```
+3. **No Redundant Questioning:** If `otpOrPinShared` is `true`, the assistant immediately gives containment advice and will never ask *"Did you share your OTP?"*.
 
 ---
 
-## 5. Security & Boundary Hardening
+## 4. Server-Side Tool Calling & Safety Grounding
 
-- **Credential Isolation**: AI API key is read solely from backend environment variable `AI_API_KEY` or `APP_AI_API_KEY`. It is never emitted in `/api/chat/status`, never rendered in frontend HTML/JS, and excluded from git tracking.
-- **PCI-DSS Protection**: Credit and debit card numbers matching pattern `\b(?:\d[ -]*?){13,19}\b` are redacted to `[REDACTED_CARD_NUMBER]` in memory before logging or forwarding.
-- **Prompt Injection Defense**: User messages are demarcated as untrusted input data; system directives mandate that user prompt overrides must be ignored.
-- **SSRF Hardening**: All scanned web addresses pass through IP resolution and CIDR filtering before network probing or heuristic execution.
+`GeminiService` enables native function execution with strict server-side validation:
+
+### Supported Tools:
+1. **`analyze_url(url: string)`**
+   - Validates URL against SSRF protection (`SsrfProtectionService`) to block localhost, AWS metadata (`169.254.169.254`), and private RFC 1918 addresses.
+   - Evaluates URL lexical heuristics, brand impersonation, and entropy.
+   - Returns structured score (0–100), risk level (`HIGH_RISK`, `SAFE`), and indicators.
+2. **`explain_scan_result(scan_id: integer)`**
+   - Queries `URLScanRepository` for verified database findings.
+   - Injects canonical scan summary into LLM context, forbidding hallucinations or contradiction of verified scan verdicts.
+
+---
+
+## 5. Indian Cybersecurity & Banking Directives
+
+The system is configured with explicit directives for Indian financial and digital infrastructure:
+
+- **1930 National Cyber Crime Helpline:** Always recommended within the **Golden Hour (first 2–3 hours)** of financial fraud to trigger automated freezing via the Indian Cybercrime Coordination Centre (I4C) CFCFRMS platform.
+- **National Portal:** [cybercrime.gov.in](https://cybercrime.gov.in/) for formal evidence lodging.
+- **TRAI DND & 1909:** For SMS smishing and fake delivery notifications.
+- **CEIR (ceir.gov.in):** Central Equipment Identity Register for blacklisting lost/stolen device IMEIs.
+- **UPI QR Clarification:** Clarifies that receiving money on UPI **never requires scanning a QR code or entering a UPI PIN**.
+
+---
+
+## 6. Adaptive Detail & Response Conciseness
+
+The assistant detects the user's intent and explicit preferences to adapt response length:
+- **Simple Definitions (`What is phishing?`, `What is OTP?`):** Default to roughly 1–3 short sentences (20–60 words) without redundant headers or bulleted checklists.
+- **Incident Containment (`I gave my OTP`):** Prioritizes urgent containment actions first (block channels, call 1930).
+- **Comprehensive Requests (`in detail`, `step by step`):** Expands up to 1024 tokens for in-depth educational guidance.

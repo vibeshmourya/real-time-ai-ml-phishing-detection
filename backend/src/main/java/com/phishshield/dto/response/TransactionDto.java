@@ -23,6 +23,11 @@ public class TransactionDto {
     private String notes;
     private LocalDateTime createdAt;
 
+    // Structured Risk Scoring Fields
+    private Integer riskScore;
+    private String severity;
+    private String recommendation;
+
     public TransactionDto() {}
 
     public static TransactionDto fromEntity(FinancialTransaction t) {
@@ -43,6 +48,22 @@ public class TransactionDto {
         dto.setFlagReason(t.getFlagReason());
         dto.setNotes(t.getNotes());
         dto.setCreatedAt(t.getCreatedAt());
+
+        // Derive presentation risk metrics from status and flag reason
+        if (t.getStatus() == TransactionStatus.FLAGGED_SUSPICIOUS) {
+            dto.setRiskScore(75);
+            dto.setSeverity("HIGH");
+            dto.setRecommendation("Verify this debit with your bank statement or card provider immediately.");
+        } else if (t.getStatus() == TransactionStatus.NEEDS_REVIEW) {
+            dto.setRiskScore(45);
+            dto.setSeverity("MEDIUM");
+            dto.setRecommendation("Check if you recognize this recipient and authorized amount.");
+        } else {
+            dto.setRiskScore(5);
+            dto.setSeverity("LOW");
+            dto.setRecommendation("Normal authorized transaction.");
+        }
+
         return dto;
     }
 
@@ -78,4 +99,11 @@ public class TransactionDto {
     public void setNotes(String notes) { this.notes = notes; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public Integer getRiskScore() { return riskScore; }
+    public void setRiskScore(Integer riskScore) { this.riskScore = riskScore; }
+    public String getSeverity() { return severity; }
+    public void setSeverity(String severity) { this.severity = severity; }
+    public String getRecommendation() { return recommendation; }
+    public void setRecommendation(String recommendation) { this.recommendation = recommendation; }
 }

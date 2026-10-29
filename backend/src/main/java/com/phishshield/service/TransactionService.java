@@ -1,31 +1,27 @@
 package com.phishshield.service;
 
 import com.phishshield.domain.*;
+import com.phishshield.dto.request.ImportConfirmRequest;
 import com.phishshield.dto.request.TransactionRequest;
-import com.phishshield.dto.response.TransactionDto;
-import com.phishshield.dto.response.TransactionSummaryDto;
+import com.phishshield.dto.response.*;
 import com.phishshield.exception.BadRequestException;
 import com.phishshield.exception.ResourceNotFoundException;
 import com.phishshield.repository.FinancialTransactionRepository;
 import com.phishshield.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,6 +34,8 @@ public class TransactionService {
 
     private final FinancialTransactionRepository transactionRepository;
     private final UserRepository userRepository;
+    private final UnifiedStatementParser statementParser;
+    private final PersonalizedRiskAssessmentService riskAssessmentService;
 
     private static final Pattern AMOUNT_PATTERN = Pattern.compile("(?i)(?:rs\\.?|inr)\\s*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]{1,2})?)");
     private static final Pattern ACCOUNT_PATTERN = Pattern.compile("(?i)(?:a/c|acct|account|card)\\s*(?:ending|no|[*x]+)?\\s*([0-9x*]{3,6})");
@@ -45,9 +43,13 @@ public class TransactionService {
     private static final Pattern REF_PATTERN = Pattern.compile("(?i)(?:ref|rrn|upi\\s*ref|txn\\s*id)\\s*[:#-]?\\s*([a-zA-Z0-9]{6,22})");
 
     public TransactionService(FinancialTransactionRepository transactionRepository,
-                              UserRepository userRepository) {
+                              UserRepository userRepository,
+                              UnifiedStatementParser statementParser,
+                              PersonalizedRiskAssessmentService riskAssessmentService) {
         this.transactionRepository = transactionRepository;
         this.userRepository = userRepository;
+        this.statementParser = statementParser;
+        this.riskAssessmentService = riskAssessmentService;
     }
 
     @Transactional
@@ -61,7 +63,7 @@ public class TransactionService {
 
         TransactionCategory category = request.getCategory() != null && request.getCategory() != TransactionCategory.OTHER
                 ? request.getCategory()
-                : autoCategorize(request.getMerchant(), request.getNotes());
+                : statementParser.inferCategory(request.getMerchant());
 
         String fingerprint = generateFingerprint(userId, txnDate, request.getAmount(), 
                 request.getMerchant(), request.getTransactionReference());
@@ -88,129 +90,187 @@ public class TransactionService {
                 .duplicateFingerprint(fingerprint)
                 .build();
 
-        // Run anomaly detection
-        evaluateAnomaly(txn, userId);
+        // Personalized Anomaly Assessment (real-time manual entry)
+        PersonalizedRiskAssessment assessment = riskAssessmentService.evaluateTransaction(txn, userId, false);
+        txn.setStatus(assessment.getSuggestedStatus());
+        if (assessment.getSuggestedStatus() != TransactionStatus.CONFIRMED) {
+            txn.setFlagReason(assessment.getExplanation());
+        }
 
         FinancialTransaction saved = transactionRepository.save(txn);
-        return TransactionDto.fromEntity(saved);
+        TransactionDto dto = TransactionDto.fromEntity(saved);
+        dto.setRiskScore(assessment.getRiskScore());
+        dto.setSeverity(assessment.getSeverity());
+        dto.setRecommendation(assessment.getRecommendation());
+        return dto;
+    }
+
+    // ==========================================
+    // Unified Statement Import Workflow (Phase 2)
+    // ==========================================
+
+    @Transactional(readOnly = true)
+    public StatementPreviewResponseDto previewImport(MultipartFile file, Long userId) {
+        userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+
+        StatementPreviewResponseDto preview = statementParser.parseStatementPreview(file);
+
+        int duplicateCount = 0;
+        for (StatementPreviewRowDto row : preview.getPreviewRows()) {
+            if (row.isValid()) {
+                String fp = generateFingerprint(userId, row.getDate(), row.getAmount(), row.getDescription(), row.getReference());
+                if (transactionRepository.existsByUserIdAndDuplicateFingerprint(userId, fp)) {
+                    row.setDuplicate(true);
+                    duplicateCount++;
+                }
+            }
+        }
+        preview.setDuplicateCount(duplicateCount);
+        return preview;
     }
 
     @Transactional
-    public Map<String, Object> importCsvTransactions(MultipartFile file, Long userId) {
+    public Map<String, Object> confirmImport(ImportConfirmRequest request, Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
-        if (file == null || file.isEmpty()) {
-            throw new BadRequestException("Uploaded CSV file is empty");
+        if (request == null || request.getRows() == null || request.getRows().isEmpty()) {
+            throw new BadRequestException("No transaction rows selected for commit.");
         }
 
         int importedCount = 0;
-        int duplicateCount = 0;
-        int errorCount = 0;
-        List<String> importErrors = new ArrayList<>();
+        int duplicateSkippedCount = 0;
+        int invalidCount = 0;
+        int flaggedCount = 0;
+        List<String> errors = new ArrayList<>();
 
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-            String headerLine = reader.readLine();
-            if (headerLine == null) {
-                throw new BadRequestException("CSV file contains no headers");
+        List<FinancialTransaction> toSave = new ArrayList<>();
+
+        for (StatementPreviewRowDto row : request.getRows()) {
+            if (!row.isValid()) {
+                invalidCount++;
+                continue;
             }
 
-            String[] headers = headerLine.toLowerCase().split(",");
-            int dateIdx = findColumnIndex(headers, "date", "txn date", "transaction date");
-            int descIdx = findColumnIndex(headers, "description", "narration", "particulars", "merchant");
-            int debitIdx = findColumnIndex(headers, "debit", "withdrawal", "spent");
-            int creditIdx = findColumnIndex(headers, "credit", "deposit");
-            int amountIdx = findColumnIndex(headers, "amount");
-            int refIdx = findColumnIndex(headers, "ref", "reference", "chq/ref no", "txn id");
+            try {
+                LocalDateTime txnDate = row.getDate() != null ? row.getDate() : LocalDateTime.now();
+                BigDecimal amount = row.getAmount();
+                if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+                    invalidCount++;
+                    continue;
+                }
 
-            String line;
-            int rowNum = 1;
-            while ((line = reader.readLine()) != null) {
-                rowNum++;
-                line = line.trim();
-                if (line.isEmpty()) continue;
+                String fingerprint = generateFingerprint(userId, txnDate, amount, row.getDescription(), row.getReference());
+                if (transactionRepository.existsByUserIdAndDuplicateFingerprint(userId, fingerprint)) {
+                    duplicateSkippedCount++;
+                    continue;
+                }
 
-                try {
-                    String[] cols = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1);
-                    
-                    // Parse date
-                    LocalDateTime txnDate = parseCsvDate(cols, dateIdx);
-                    String description = descIdx >= 0 && descIdx < cols.length ? cleanCol(cols[descIdx]) : "CSV Import";
-                    String reference = refIdx >= 0 && refIdx < cols.length ? cleanCol(cols[refIdx]) : null;
+                TransactionDirection direction = "INCOME".equalsIgnoreCase(row.getDirection())
+                        ? TransactionDirection.INCOME
+                        : TransactionDirection.EXPENSE;
 
-                    BigDecimal debitAmount = parseAmount(cols, debitIdx);
-                    BigDecimal creditAmount = parseAmount(cols, creditIdx);
+                TransactionCategory category = TransactionCategory.OTHER;
+                if (row.getCategory() != null) {
+                    try {
+                        category = TransactionCategory.valueOf(row.getCategory());
+                    } catch (Exception ignored) {}
+                }
 
-                    TransactionDirection direction;
-                    BigDecimal amount;
+                TransactionType type = TransactionType.UPI;
+                if (row.getTransactionType() != null) {
+                    try {
+                        type = TransactionType.valueOf(row.getTransactionType());
+                    } catch (Exception ignored) {}
+                }
 
-                    if (debitAmount != null && debitAmount.compareTo(BigDecimal.ZERO) > 0) {
-                        direction = TransactionDirection.EXPENSE;
-                        amount = debitAmount;
-                    } else if (creditAmount != null && creditAmount.compareTo(BigDecimal.ZERO) > 0) {
-                        direction = TransactionDirection.INCOME;
-                        amount = creditAmount;
-                    } else if (amountIdx >= 0 && amountIdx < cols.length) {
-                        BigDecimal rawAmt = parseAmount(cols, amountIdx);
-                        if (rawAmt == null) continue;
-                        if (rawAmt.compareTo(BigDecimal.ZERO) < 0) {
-                            direction = TransactionDirection.EXPENSE;
-                            amount = rawAmt.abs();
-                        } else {
-                            direction = TransactionDirection.INCOME;
-                            amount = rawAmt;
-                        }
-                    } else {
-                        continue;
-                    }
+                String sourceFileName = request.getFileName() != null ? request.getFileName() : "statement";
+                TransactionImportSource importSource = sourceFileName.toLowerCase().endsWith(".pdf")
+                        ? TransactionImportSource.STATEMENT
+                        : sourceFileName.toLowerCase().endsWith(".xlsx")
+                        ? TransactionImportSource.STATEMENT
+                        : TransactionImportSource.CSV;
 
-                    String fingerprint = generateFingerprint(userId, txnDate, amount, description, reference);
-                    if (transactionRepository.existsByUserIdAndDuplicateFingerprint(userId, fingerprint)) {
-                        duplicateCount++;
-                        continue;
-                    }
+                FinancialTransaction txn = FinancialTransaction.builder()
+                        .user(user)
+                        .transactionDateTime(txnDate)
+                        .amount(amount)
+                        .currency("INR")
+                        .direction(direction)
+                        .transactionType(type)
+                        .category(category)
+                        .merchant(row.getDescription())
+                        .transactionReference(row.getReference())
+                        .maskedAccount(row.getAccount())
+                        .importSource(importSource)
+                        .status(TransactionStatus.CONFIRMED)
+                        .notes("Imported from statement: " + sourceFileName)
+                        .duplicateFingerprint(fingerprint)
+                        .build();
 
-                    TransactionCategory category = autoCategorize(description, null);
-                    TransactionType type = inferTransactionType(description);
+                // Personalized Anomaly Detection (batch historical statement import suppresses real-time alerts)
+                PersonalizedRiskAssessment assessment = riskAssessmentService.evaluateTransaction(txn, userId, true);
+                txn.setStatus(assessment.getSuggestedStatus());
+                if (assessment.getSuggestedStatus() != TransactionStatus.CONFIRMED) {
+                    txn.setFlagReason(assessment.getExplanation());
+                    flaggedCount++;
+                }
 
-                    FinancialTransaction txn = FinancialTransaction.builder()
-                            .user(user)
-                            .transactionDateTime(txnDate)
-                            .amount(amount)
-                            .currency("INR")
-                            .direction(direction)
-                            .transactionType(type)
-                            .category(category)
-                            .merchant(description)
-                            .transactionReference(reference)
-                            .importSource(TransactionImportSource.CSV)
-                            .status(TransactionStatus.CONFIRMED)
-                            .notes("Imported from CSV file: " + file.getOriginalFilename())
-                            .duplicateFingerprint(fingerprint)
-                            .build();
-
-                    evaluateAnomaly(txn, userId);
-                    transactionRepository.save(txn);
-                    importedCount++;
-                } catch (Exception ex) {
-                    errorCount++;
-                    if (importErrors.size() < 5) {
-                        importErrors.add("Row " + rowNum + ": " + ex.getMessage());
-                    }
+                toSave.add(txn);
+                importedCount++;
+            } catch (Exception ex) {
+                invalidCount++;
+                if (errors.size() < 5) {
+                    errors.add("Row " + row.getRowNumber() + ": " + ex.getMessage());
                 }
             }
-        } catch (Exception e) {
-            log.error("Failed to parse CSV file: {}", e.getMessage(), e);
-            throw new BadRequestException("CSV parsing failed: " + e.getMessage());
+        }
+
+        if (!toSave.isEmpty()) {
+            transactionRepository.saveAll(toSave);
         }
 
         Map<String, Object> result = new HashMap<>();
         result.put("importedCount", importedCount);
-        result.put("duplicateSkippedCount", duplicateCount);
-        result.put("errorCount", errorCount);
-        result.put("errors", importErrors);
+        result.put("duplicateSkippedCount", duplicateSkippedCount);
+        result.put("invalidCount", invalidCount);
+        result.put("flaggedCount", flaggedCount);
+        result.put("errors", errors);
+        result.put("message", String.format("Successfully imported %d transactions. %d duplicates skipped. %d flagged for review.",
+                importedCount, duplicateSkippedCount, flaggedCount));
+
         return result;
     }
+
+    @Transactional
+    public Map<String, Object> importUnifiedTransactions(MultipartFile file, boolean confirmAmbiguous, Long userId) {
+        StatementPreviewResponseDto preview = previewImport(file, userId);
+
+        if (preview.isAmbiguous() && !confirmAmbiguous) {
+            Map<String, Object> ambigResult = new HashMap<>();
+            ambigResult.put("requiresConfirmation", true);
+            ambigResult.put("preview", preview);
+            ambigResult.put("message", "PDF/Statement structure contains ambiguous columns. User confirmation required.");
+            return ambigResult;
+        }
+
+        ImportConfirmRequest confirmRequest = new ImportConfirmRequest();
+        confirmRequest.setRows(preview.getPreviewRows());
+        confirmRequest.setFileName(file.getOriginalFilename());
+        confirmRequest.setConfirmAmbiguous(confirmAmbiguous);
+
+        return confirmImport(confirmRequest, userId);
+    }
+
+    @Transactional
+    public Map<String, Object> importCsvTransactions(MultipartFile file, Long userId) {
+        return importUnifiedTransactions(file, true, userId);
+    }
+
+    // ==========================================
+    // Notification & SMS Parser (Phase 5)
+    // ==========================================
 
     @Transactional
     public TransactionDto parseAndSaveNotificationText(String text, Long userId) {
@@ -222,59 +282,48 @@ public class TransactionService {
         }
 
         String lower = text.toLowerCase();
-        TransactionDirection direction;
-        if (lower.contains("debited") || lower.contains("spent") || lower.contains("paid") || lower.contains("sent") || lower.contains("withdrawn")) {
-            direction = TransactionDirection.EXPENSE;
-        } else if (lower.contains("credited") || lower.contains("received") || lower.contains("refund") || lower.contains("deposited")) {
-            direction = TransactionDirection.INCOME;
-        } else {
-            direction = TransactionDirection.EXPENSE; // Default conservative assumption
-        }
+        TransactionDirection direction = (lower.contains("credited") || lower.contains("received") || lower.contains("refund"))
+                ? TransactionDirection.INCOME
+                : TransactionDirection.EXPENSE;
 
-        // Extract Amount
-        BigDecimal amount = BigDecimal.valueOf(100.00); // Default placeholder if unfound
+        BigDecimal amount = BigDecimal.valueOf(100.00);
         Matcher amtMatcher = AMOUNT_PATTERN.matcher(text);
         if (amtMatcher.find()) {
-            String raw = amtMatcher.group(1).replace(",", "");
             try {
-                amount = new BigDecimal(raw);
+                amount = new BigDecimal(amtMatcher.group(1).replace(",", ""));
             } catch (Exception ignored) {}
         }
 
-        // Extract Account
         String maskedAccount = null;
         Matcher acctMatcher = ACCOUNT_PATTERN.matcher(text);
         if (acctMatcher.find()) {
             maskedAccount = acctMatcher.group(1);
         }
 
-        // Extract Merchant / Counterparty
         String merchant = "Unknown Counterparty";
         Matcher vpaMatcher = UPI_VPA_PATTERN.matcher(text);
         if (vpaMatcher.find()) {
             merchant = vpaMatcher.group(1);
         } else {
-            // Find "at [Merchant]" or "to [Merchant]"
             Matcher atMatcher = Pattern.compile("(?i)(?:at|to|info:)\\s+([A-Za-z0-9 &._-]{3,30})").matcher(text);
             if (atMatcher.find()) {
                 merchant = atMatcher.group(1).trim();
             }
         }
 
-        // Extract Reference
         String reference = null;
         Matcher refMatcher = REF_PATTERN.matcher(text);
         if (refMatcher.find()) {
             reference = refMatcher.group(1);
         }
 
-        TransactionType type = inferTransactionType(text);
-        TransactionCategory category = autoCategorize(merchant, text);
+        TransactionType type = statementParser.inferType(text);
+        TransactionCategory category = statementParser.inferCategory(merchant + " " + text);
         LocalDateTime now = LocalDateTime.now();
 
         String fingerprint = generateFingerprint(userId, now, amount, merchant, reference);
         if (transactionRepository.existsByUserIdAndDuplicateFingerprint(userId, fingerprint)) {
-            throw new BadRequestException("This transaction notification has already been recorded.");
+            throw new BadRequestException("This transaction notification has already been recorded in your ledger.");
         }
 
         FinancialTransaction txn = FinancialTransaction.builder()
@@ -291,13 +340,23 @@ public class TransactionService {
                 .transactionReference(reference)
                 .importSource(TransactionImportSource.NOTIFICATION_TEXT)
                 .status(TransactionStatus.CONFIRMED)
-                .notes("Extracted from notification text: \"" + (text.length() > 80 ? text.substring(0, 80) + "..." : text) + "\"")
+                .notes("Extracted from notification: \"" + (text.length() > 60 ? text.substring(0, 60) + "..." : text) + "\"")
                 .duplicateFingerprint(fingerprint)
                 .build();
 
-        evaluateAnomaly(txn, userId);
+        // Personalized Anomaly Assessment (real-time notification alert)
+        PersonalizedRiskAssessment assessment = riskAssessmentService.evaluateTransaction(txn, userId, false);
+        txn.setStatus(assessment.getSuggestedStatus());
+        if (assessment.getSuggestedStatus() != TransactionStatus.CONFIRMED) {
+            txn.setFlagReason(assessment.getExplanation());
+        }
+
         FinancialTransaction saved = transactionRepository.save(txn);
-        return TransactionDto.fromEntity(saved);
+        TransactionDto dto = TransactionDto.fromEntity(saved);
+        dto.setRiskScore(assessment.getRiskScore());
+        dto.setSeverity(assessment.getSeverity());
+        dto.setRecommendation(assessment.getRecommendation());
+        return dto;
     }
 
     public Page<TransactionDto> getUserTransactions(Long userId, Pageable pageable, 
@@ -313,7 +372,14 @@ public class TransactionService {
             page = transactionRepository.findByUserId(userId, pageable);
         }
 
-        return page.map(TransactionDto::fromEntity);
+        return page.map(t -> {
+            TransactionDto dto = TransactionDto.fromEntity(t);
+            PersonalizedRiskAssessment assessment = riskAssessmentService.evaluateTransaction(t, userId, true);
+            dto.setRiskScore(assessment.getRiskScore());
+            dto.setSeverity(assessment.getSeverity());
+            dto.setRecommendation(assessment.getRecommendation());
+            return dto;
+        });
     }
 
     public TransactionSummaryDto getTransactionSummary(Long userId) {
@@ -333,7 +399,14 @@ public class TransactionService {
         }
 
         List<FinancialTransaction> recent = transactionRepository.findTop10ByUserIdOrderByTransactionDateTimeDesc(userId);
-        List<TransactionDto> recentDtos = recent.stream().map(TransactionDto::fromEntity).collect(Collectors.toList());
+        List<TransactionDto> recentDtos = recent.stream().map(t -> {
+            TransactionDto dto = TransactionDto.fromEntity(t);
+            PersonalizedRiskAssessment assessment = riskAssessmentService.evaluateTransaction(t, userId, true);
+            dto.setRiskScore(assessment.getRiskScore());
+            dto.setSeverity(assessment.getSeverity());
+            dto.setRecommendation(assessment.getRecommendation());
+            return dto;
+        }).collect(Collectors.toList());
 
         TransactionSummaryDto summary = new TransactionSummaryDto();
         summary.setTotalInflows(totalIn);
@@ -343,7 +416,19 @@ public class TransactionService {
         summary.setNeedsReviewCount(review);
         summary.setCategoryExpenses(categoryExpenses);
         summary.setRecentTransactions(recentDtos);
-        summary.setCoverageNote("Records based on user-entered transactions, CSV statements, and notification entries. Prahar does not connect directly to bank servers without authorization.");
+        summary.setCoverageNote("Records based on user-entered transactions, CSV/Excel/PDF statements, and authorized notifications. Prahar does not connect directly to bank servers without authorization.");
+
+        // Attach Personalized Baseline Metrics
+        PersonalizedRiskAssessmentService.BaselineProfile baseline = riskAssessmentService.computeUserProfile(userId);
+        summary.setPersonalizationEstablished(baseline.isEstablished());
+        summary.setBaselineMedian(baseline.getMedian());
+        summary.setBaselineMad(baseline.getMad());
+        summary.setHistoryCount(baseline.getSampleSize());
+        summary.setRecurringExpensesCount(baseline.getRecurringPatterns().size());
+        summary.setBaselineStatusMessage(baseline.isEstablished()
+                ? String.format("Personalized baseline active (median: ₹%s, dispersion: ₹%s, %d recurring patterns recognized).",
+                    baseline.getMedian().toPlainString(), baseline.getMad().toPlainString(), baseline.getRecurringPatterns().size())
+                : "Personalization baseline is establishing (requires at least 5 transactions). Conservative safety rules active.");
 
         return summary;
     }
@@ -395,65 +480,6 @@ public class TransactionService {
         return sb.toString();
     }
 
-    // Helper: Categorization Engine
-    public TransactionCategory autoCategorize(String merchant, String notes) {
-        String combined = ((merchant != null ? merchant : "") + " " + (notes != null ? notes : "")).toLowerCase();
-        if (combined.matches(".*(zomato|swiggy|mcdonald|kfc|starbucks|burger|cafe|restaurant|hotel|food|canteen|bakes).*")) {
-            return TransactionCategory.FOOD;
-        }
-        if (combined.matches(".*(amazon|flipkart|myntra|meesho|nykaa|zara|h&m|mart|supermarket|dmart|shopping|retail|store).*")) {
-            return TransactionCategory.SHOPPING;
-        }
-        if (combined.matches(".*(electricity|bescom|tneb|airtel|jio|vi|recharge|broadband|water|gas|bill|utility|cylinder|dth).*")) {
-            return TransactionCategory.BILLS;
-        }
-        if (combined.matches(".*(uber|ola|rapido|irctc|indigo|flight|train|metro|rail|fuel|petrol|diesel|toll|fastag|bus).*")) {
-            return TransactionCategory.TRAVEL;
-        }
-        if (combined.matches(".*(atm|cash wdl|cash withdrawal|cash).*")) {
-            return TransactionCategory.CASH_WITHDRAWAL;
-        }
-        if (combined.matches(".*(salary|payroll|stipend|wages|bonus|interest|dividend).*")) {
-            return TransactionCategory.SALARY;
-        }
-        if (combined.matches(".*(refund|cashback|reversal|chargeback).*")) {
-            return TransactionCategory.REFUNDS;
-        }
-        if (combined.matches(".*(zerodha|groww|mutual fund|sip|upstox|coin|nps|sebi|investment).*")) {
-            return TransactionCategory.INVESTMENTS;
-        }
-        if (combined.matches(".*(self transfer|transfer to self|linked account).*")) {
-            return TransactionCategory.TRANSFERS;
-        }
-        return TransactionCategory.OTHER;
-    }
-
-    // Helper: Anomaly Detection Rules
-    private void evaluateAnomaly(FinancialTransaction txn, Long userId) {
-        // Rule 1: High debit threshold (> Rs 50,000)
-        if (txn.getDirection() == TransactionDirection.EXPENSE && txn.getAmount().compareTo(new BigDecimal("50000")) > 0) {
-            txn.setStatus(TransactionStatus.FLAGGED_SUSPICIOUS);
-            txn.setFlagReason("High-value debit (> ₹50,000) requires verification");
-            return;
-        }
-
-        // Rule 2: Suspicious keywords in counterparty/notes
-        String text = (txn.getMerchant() != null ? txn.getMerchant() : "") + " " + (txn.getNotes() != null ? txn.getNotes() : "");
-        if (text.toLowerCase().matches(".*(crypto|bet|lottery|mandate auto|unknown debit|overdraft fee).*")) {
-            txn.setStatus(TransactionStatus.FLAGGED_SUSPICIOUS);
-            txn.setFlagReason("Transaction description contains high-risk keywords");
-            return;
-        }
-
-        // Rule 3: Missing merchant/reference on large debit (> Rs 10,000)
-        if (txn.getDirection() == TransactionDirection.EXPENSE && txn.getAmount().compareTo(new BigDecimal("10000")) > 0) {
-            if (txn.getMerchant() == null || txn.getMerchant().isBlank() || "Unknown Counterparty".equalsIgnoreCase(txn.getMerchant())) {
-                txn.setStatus(TransactionStatus.NEEDS_REVIEW);
-                txn.setFlagReason("Uncategorized large debit with missing merchant information");
-            }
-        }
-    }
-
     private String generateFingerprint(Long userId, LocalDateTime dt, BigDecimal amount, String merchant, String ref) {
         String raw = userId + "_" + (dt != null ? dt.toLocalDate() : "") + "_" 
                 + (amount != null ? amount.setScale(2, RoundingMode.HALF_UP) : "") + "_" 
@@ -472,56 +498,6 @@ public class TransactionService {
         } catch (NoSuchAlgorithmException e) {
             return String.valueOf(raw.hashCode());
         }
-    }
-
-    private int findColumnIndex(String[] headers, String... candidates) {
-        for (int i = 0; i < headers.length; i++) {
-            String h = headers[i].trim();
-            for (String cand : candidates) {
-                if (h.contains(cand)) return i;
-            }
-        }
-        return -1;
-    }
-
-    private String cleanCol(String val) {
-        if (val == null) return "";
-        return val.trim().replaceAll("^\"|\"$", "");
-    }
-
-    private BigDecimal parseAmount(String[] cols, int idx) {
-        if (idx < 0 || idx >= cols.length) return null;
-        String val = cleanCol(cols[idx]).replace(",", "").replace("₹", "").replace("rs", "").trim();
-        if (val.isEmpty()) return null;
-        try {
-            return new BigDecimal(val);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private LocalDateTime parseCsvDate(String[] cols, int idx) {
-        if (idx < 0 || idx >= cols.length) return LocalDateTime.now();
-        String val = cleanCol(cols[idx]).trim();
-        if (val.isEmpty()) return LocalDateTime.now();
-
-        String[] formats = {"yyyy-MM-dd", "dd-MM-yyyy", "dd/MM/yyyy", "MM/dd/yyyy", "dd-MMM-yyyy", "yyyy/MM/dd"};
-        for (String f : formats) {
-            try {
-                LocalDate d = LocalDate.parse(val, DateTimeFormatter.ofPattern(f, Locale.ENGLISH));
-                return d.atStartOfDay();
-            } catch (Exception ignored) {}
-        }
-        return LocalDateTime.now();
-    }
-
-    private TransactionType inferTransactionType(String text) {
-        String lower = text.toLowerCase();
-        if (lower.contains("upi") || lower.contains("@")) return TransactionType.UPI;
-        if (lower.contains("atm") || lower.contains("cash wdl")) return TransactionType.ATM;
-        if (lower.contains("card") || lower.contains("pos") || lower.contains("debit card") || lower.contains("credit card")) return TransactionType.CARD;
-        if (lower.contains("neft") || lower.contains("rtgs") || lower.contains("netbanking") || lower.contains("imps")) return TransactionType.NETBANKING;
-        return TransactionType.UPI;
     }
 
     private String inferBank(String text) {

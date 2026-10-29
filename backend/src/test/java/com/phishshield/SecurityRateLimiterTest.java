@@ -42,6 +42,12 @@ class SecurityRateLimiterTest {
         LoginRequest req = new LoginRequest("testuser", "WrongPass123!");
         String json = objectMapper.writeValueAsString(req);
 
+        // Guard against minute rollover during execution
+        long msIntoMinute = System.currentTimeMillis() % 60000;
+        if (msIntoMinute > 57000) {
+            Thread.sleep(60000 - msIntoMinute + 100);
+        }
+
         // Send 15 requests (allowed threshold)
         for (int i = 0; i < 15; i++) {
             mockMvc.perform(post("/api/auth/login")

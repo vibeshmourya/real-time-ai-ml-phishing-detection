@@ -15,6 +15,14 @@ public class TransactionSummaryDto {
     private List<TransactionDto> recentTransactions;
     private String coverageNote;
 
+    // Personalized Baseline Metrics
+    private boolean personalizationEstablished;
+    private BigDecimal baselineMedian;
+    private BigDecimal baselineMad;
+    private long historyCount;
+    private int recurringExpensesCount;
+    private String baselineStatusMessage;
+
     public TransactionSummaryDto() {}
 
     public BigDecimal getTotalInflows() { return totalInflows; }
@@ -33,4 +41,17 @@ public class TransactionSummaryDto {
     public void setRecentTransactions(List<TransactionDto> recentTransactions) { this.recentTransactions = recentTransactions; }
     public String getCoverageNote() { return coverageNote; }
     public void setCoverageNote(String coverageNote) { this.coverageNote = coverageNote; }
+
+    public boolean isPersonalizationEstablished() { return personalizationEstablished; }
+    public void setPersonalizationEstablished(boolean personalizationEstablished) { this.personalizationEstablished = personalizationEstablished; }
+    public BigDecimal getBaselineMedian() { return baselineMedian; }
+    public void setBaselineMedian(BigDecimal baselineMedian) { this.baselineMedian = baselineMedian; }
+    public BigDecimal getBaselineMad() { return baselineMad; }
+    public void setBaselineMad(BigDecimal baselineMad) { this.baselineMad = baselineMad; }
+    public long getHistoryCount() { return historyCount; }
+    public void setHistoryCount(long historyCount) { this.historyCount = historyCount; }
+    public int getRecurringExpensesCount() { return recurringExpensesCount; }
+    public void setRecurringExpensesCount(int recurringExpensesCount) { this.recurringExpensesCount = recurringExpensesCount; }
+    public String getBaselineStatusMessage() { return baselineStatusMessage; }
+    public void setBaselineStatusMessage(String baselineStatusMessage) { this.baselineStatusMessage = baselineStatusMessage; }
 }

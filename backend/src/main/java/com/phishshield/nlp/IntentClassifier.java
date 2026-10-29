@@ -60,8 +60,8 @@ public class IntentClassifier {
             }
 
             // B. Payment Channel follow-up
-            if ("payment_channel".equals(slot) || (context.getLastIntent() == NlpIntent.UNKNOWN_DEBIT && 
-                (lower.contains("upi") || lower.contains("card") || lower.contains("atm") || lower.contains("net banking") || lower.contains("netbanking")))) {
+            if ("payment_channel".equals(slot) || "details_type".equals(slot) || (isIncidentIntent(context.getLastIntent()) && 
+                (lower.contains("upi") || lower.contains("card") || lower.contains("atm") || lower.contains("net banking") || lower.contains("netbanking") || lower.contains("paid")))) {
                 if (lower.contains("upi") || lower.contains("gpay") || lower.contains("google pay") ||
                     lower.contains("phonepe") || lower.contains("paytm") || lower.contains("bhim")) {
                     if (context.getLastIntent() == NlpIntent.FAKE_SHOPPING_SCAM) {
@@ -133,16 +133,36 @@ public class IntentClassifier {
                 NlpIntent previous = context.getLastIntent() != null ? context.getLastIntent() : NlpIntent.UNKNOWN_DEBIT;
                 return new ClassificationResult(previous, 0.95, true);
             }
+
+            // F. Account type follow-up (e.g. after OTP or compromise inquiry)
+            if ("account_type".equals(slot)) {
+                NlpIntent prev = context.getLastIntent() != null ? context.getLastIntent() : NlpIntent.OTP_DISCLOSURE;
+                return new ClassificationResult(prev, 0.97, true);
+            }
+
+            if ("debit_or_otp_status".equals(slot) || "details_type".equals(slot)) {
+                NlpIntent prev = context.getLastIntent() != null ? context.getLastIntent() : NlpIntent.ACCOUNT_COMPROMISE;
+                return new ClassificationResult(prev, 0.96, true);
+            }
         }
 
-        // Conversational follow-up: Payment channel for ongoing unauthorized debit incident
-        if (context != null && context.getLastIntent() == NlpIntent.UNKNOWN_DEBIT &&
+        // Conversational follow-up: Payment channel for ongoing incident
+        if (context != null && isIncidentIntent(context.getLastIntent()) &&
             (lower.contains("upi") || lower.contains("card") || lower.contains("atm") || lower.contains("netbanking") || lower.contains("net banking"))) {
             if (lower.contains("upi") || lower.contains("gpay") || lower.contains("phonepe") || lower.contains("paytm") || lower.contains("bhim")) {
                 return new ClassificationResult(NlpIntent.UPI_FRAUD, 0.96, true);
             }
             if (lower.contains("card") || lower.contains("atm")) {
                 return new ClassificationResult(NlpIntent.ATM_CARD_FRAUD, 0.96, true);
+            }
+        }
+
+        // Conversational follow-up: Caller identity or bank for ongoing OTP disclosure incident
+        if (context != null && context.getLastIntent() == NlpIntent.OTP_DISCLOSURE) {
+            if (lower.contains("sbi") || lower.contains("bank") || lower.contains("caller") || lower.contains("they said") ||
+                lower.contains("claimed") || lower.contains("hdfc") || lower.contains("icici") || lower.contains("axis") ||
+                entities.getInstitution() != null) {
+                return new ClassificationResult(NlpIntent.OTP_DISCLOSURE, 0.97, true);
             }
         }
 
@@ -182,12 +202,33 @@ public class IntentClassifier {
             return new ClassificationResult(NlpIntent.ASSISTANT_IDENTITY, 0.96, false);
         }
 
-        // Educational: Identifying / detecting fake websites
-        if (lower.contains("detect fake") || lower.contains("how do we detect") || lower.contains("how to detect fake") ||
+        // Educational: Identifying / recognizing / detecting fake or replica websites
+        boolean isFakeWebsiteEducation = lower.contains("detect fake") || lower.contains("how do we detect") || lower.contains("how to detect") ||
             lower.contains("identify fake") || lower.contains("identify a fake") || lower.contains("spot a fake") ||
-            lower.contains("spot fake") || lower.contains("ways to identify") || lower.contains("how to spot fake") ||
-            lower.contains("how to identify")) {
+            lower.contains("spot fake") || lower.contains("ways to identify") || lower.contains("how to spot") ||
+            lower.contains("how to identify") || lower.contains("how do i identify") ||
+            lower.contains("recognize a fake") || lower.contains("recognize fake") || lower.contains("how to recognize") ||
+            lower.contains("how do i recognize") || lower.contains("recognize a replica") || lower.contains("recognize replica") ||
+            lower.contains("replica website") || lower.contains("replica site") || lower.contains("imitation website") ||
+            lower.contains("imitation site") || lower.contains("cloned website") || lower.contains("cloned site") ||
+            (lower.contains("fake website") && (lower.contains("how") || lower.contains("what") || lower.contains("tell") || lower.contains("check") || lower.contains("spot")));
+
+        if (isFakeWebsiteEducation) {
             return new ClassificationResult(NlpIntent.GENERAL_CYBER_SAFETY, 0.96, false);
+        }
+
+        // Account Compromise & Banking Details Exposure (Incident: user entered credentials or banking details on a website)
+        if (Boolean.TRUE.equals(entities.getBankDetailsEntered()) ||
+            lower.contains("entered my banking details") || lower.contains("entered banking details") ||
+            lower.contains("entered my bank details") || lower.contains("entered bank details") ||
+            lower.contains("entered my bank") || lower.contains("shared my bank") ||
+            lower.contains("entered my details on a fake") || lower.contains("entered details on a fake") ||
+            lower.contains("entered my details on a suspicious") ||
+            ((lower.contains("bank details") || lower.contains("banking details") || lower.contains("account details") ||
+              lower.contains("card details")) &&
+             (lower.contains("enter") || lower.contains("shar") || lower.contains("gave") || lower.contains("typ") ||
+              lower.contains("provid") || lower.contains("fill") || lower.contains("put")))) {
+            return new ClassificationResult(NlpIntent.ACCOUNT_COMPROMISE, 0.97, false);
         }
 
         // Fake Shopping & E-Commerce Scams (Orders, fake merchant websites, suspicious sellers)
@@ -233,7 +274,11 @@ public class IntentClassifier {
         // General Online Safety, Cyber Defense Advice & Core Educational Definitions
         if (lower.contains("how can i be safe") || lower.contains("how to be safe") || lower.contains("stay safe") ||
             lower.contains("safe from any attacks") || lower.contains("safe from attacks") || lower.contains("online frauds") ||
-            lower.contains("online fraud") || lower.contains("protect myself online") || lower.contains("protect myself from") ||
+            lower.contains("online fraud") || lower.contains("online scam") || lower.contains("online scams") ||
+            lower.contains("what are online scams") || lower.contains("what is an online scam") ||
+            lower.contains("what are suspicious links") || lower.contains("what is a suspicious link") ||
+            ((lower.contains("suspicious link") || lower.contains("suspicious links")) && !lower.contains("clicked") && !lower.contains("opened") && !lower.contains("tapped") && !lower.contains("received")) ||
+            lower.contains("protect myself online") || lower.contains("protect myself from") ||
             lower.contains("avoid scams") || lower.contains("prevent fraud") || lower.contains("prevent online fraud") ||
             lower.contains("how do i prevent") || lower.contains("safety tips") ||
             lower.contains("cyber hygiene") || lower.contains("safe online") || lower.contains("how does prahar work") || 
@@ -244,6 +289,7 @@ public class IntentClassifier {
             lower.contains("what is 2fa") || lower.contains("two-factor") || lower.contains("two factor") ||
             lower.contains("session hijack") || lower.contains("session cookie") || lower.contains("cookie theft") ||
             lower.contains("steal a session") || lower.contains("steal session") ||
+            (lower.contains("difference") && (lower.contains("phishing") || lower.contains("otp") || lower.contains("upi") || lower.contains("scam"))) ||
             (lower.contains("safe") && (lower.contains("attack") || lower.contains("fraud") || lower.contains("hack") || lower.contains("scam")))) {
             return new ClassificationResult(NlpIntent.GENERAL_CYBER_SAFETY, 0.95, false);
         }
@@ -284,8 +330,8 @@ public class IntentClassifier {
             return new ClassificationResult(NlpIntent.EXPLAIN_SCAN, 0.96, false);
         }
 
-        // Informational questions starting with "what is", "how does", "explain", "how can", etc.
-        if (lower.startsWith("what is ") || lower.startsWith("how does ") || lower.startsWith("explain ") || lower.startsWith("why is ") ||
+        // Informational questions starting with "what is", "what are", "how does", "explain", "how can", etc.
+        if (lower.startsWith("what is ") || lower.startsWith("what are ") || lower.startsWith("how does ") || lower.startsWith("explain ") || lower.startsWith("why is ") ||
             lower.startsWith("how can ") || lower.startsWith("how to ") || lower.startsWith("how do i ") || lower.contains("defend against") ||
             lower.contains("machine learning") || lower.contains("what is ml") || lower.contains("how ml")) {
             if (lower.contains("phishing") || lower.contains("2fa") || lower.contains("https") || 
@@ -294,7 +340,8 @@ public class IntentClassifier {
                 lower.contains("otp") || lower.contains("upi") || lower.contains("cyber hygiene") ||
                 lower.contains("session") || lower.contains("cookie") || lower.contains("hijack") ||
                 lower.contains("fraud") || lower.contains("scam") || lower.contains("spoof") ||
-                lower.contains("machine learning") || lower.contains("ml")) {
+                lower.contains("link") || lower.contains("links") || lower.contains("website") || lower.contains("site") ||
+                lower.contains("replica") || lower.contains("machine learning") || lower.contains("ml")) {
                 return new ClassificationResult(NlpIntent.GENERAL_CYBER_SAFETY, 0.93, false);
             }
         }
@@ -320,6 +367,12 @@ public class IntentClassifier {
         // User Scan History
         if (lower.contains("my scans") || lower.contains("scan history") || lower.contains("past scans") || lower.contains("recent scans")) {
             return new ClassificationResult(NlpIntent.USER_SCAN_HISTORY, 0.95, false);
+        }
+
+        // UPI QR Code Fraud (Incident: scanned QR code and money was actually deducted/debited)
+        if ((lower.contains("qr") || lower.contains("scan")) &&
+            (lower.contains("deducted") || lower.contains("debited") || lower.contains("money lost") || lower.contains("paise kat") || lower.contains("kat gaya"))) {
+            return new ClassificationResult(NlpIntent.UPI_FRAUD, 0.97, false);
         }
 
         // OTP / Password Disclosure (Incident)
@@ -367,9 +420,13 @@ public class IntentClassifier {
             return new ClassificationResult(NlpIntent.UPI_FRAUD, 0.97, false);
         }
 
-        // ATM / Card Fraud
+        // ATM / Card Fraud & Card Blocking Inquiry
         if (lower.contains("atm fraud") || lower.contains("card fraud") || lower.contains("card cloned") || 
-            lower.contains("unauthorized atm") || lower.contains("credit card fraud") || lower.contains("debit card fraud")) {
+            lower.contains("unauthorized atm") || lower.contains("credit card fraud") || lower.contains("debit card fraud") ||
+            lower.contains("block my debit") || lower.contains("block my credit") || lower.contains("block my card") ||
+            lower.contains("block card") || lower.contains("lock my card") || lower.contains("lock card") ||
+            lower.contains("freeze card") || lower.contains("freeze my card") ||
+            ((lower.contains("card") || lower.contains("debit") || lower.contains("credit")) && (lower.contains("block") || lower.contains("lock") || lower.contains("freeze")))) {
             return new ClassificationResult(NlpIntent.ATM_CARD_FRAUD, 0.95, false);
         }
 
@@ -466,6 +523,17 @@ public class IntentClassifier {
                trimmed.equals("am i cooked") ||
                trimmed.equals("what if i already entered it") ||
                trimmed.equals("what if i entered it") ||
+               trimmed.equals("what if i entered my details") ||
+               trimmed.equals("what if i gave my details") ||
+               trimmed.equals("i already clicked it") ||
+               trimmed.equals("i clicked it") ||
+               trimmed.equals("will changing my password help") ||
+               trimmed.equals("will changing password help") ||
+               trimmed.equals("should i change my password") ||
+               trimmed.equals("how can i report it") ||
+               trimmed.equals("how do i report it") ||
+               trimmed.equals("how to report it") ||
+               trimmed.equals("where do i report it") ||
                trimmed.equals("how can i protect my account") ||
                trimmed.equals("how do i protect my account") ||
                trimmed.equals("how to protect my account") ||
@@ -509,6 +577,11 @@ public class IntentClassifier {
                 lower.startsWith("what is ") || lower.startsWith("what are ") ||
                 lower.startsWith("how does ") || lower.startsWith("explain ") ||
                 lower.startsWith("define ") ||
+                lower.contains("online scam") || lower.contains("online scams") ||
+                lower.contains("suspicious link") || lower.contains("suspicious links") ||
+                lower.contains("replica website") || lower.contains("replica site") ||
+                lower.contains("imitation website") || lower.contains("difference between") ||
+                lower.contains("stay safe online") ||
                 lower.startsWith("why did prahar") || lower.startsWith("why was this") ||
                 lower.startsWith("why is this") || lower.startsWith("why flagged") ||
                 lower.startsWith("tell me about") || lower.contains("tell me about") ||
