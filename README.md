@@ -254,7 +254,7 @@ All tests have been independently executed and verified on the current source re
 
 ---
 
-## 🎓 Final Academic Submission & Viva Dossier (Phases 31–36)
+## 🎓 Final Academic Submission & Viva Dossier
 
 For academic evaluators, university project guides, and external viva examiners, complete consolidated documentation is provided in `docs/`:
 * 📋 **[Final Packaging Report](file:///d:/MCA%20notes/MINI%20PRO%20SIH/docs/PHASE_36_PACKAGING_REPORT.md)**: Verification of included/excluded files, startup commands, and submission readiness.
